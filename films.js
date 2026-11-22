@@ -6,6 +6,7 @@
 // 재미 효과(없으면 꺼짐): pixel 0~100 도트 크기, levels 색 단계 수(2 이상)
 //   blur 0~100 가로 번짐, chroma 0~100 빨강·파랑 어긋남, scan 0~100 가로 줄무늬,
 //   stamp: 'date' 오른쪽 아래 날짜 도장, flash 0~100 가운데만 밝게(플래시 터진 느낌)
+//   flicker 0~100 밝기 깜빡임, scratch 0~100 필름 긁힘과 먼지
 // amount: 처음 강도 0~100 (없으면 100). 사용자가 강도를 밀면 그 값을 필름마다 기억한다.
 // fixed: true 면 강도 조절 없이 항상 최대(다이얼을 숨긴다).
 //         100 이면 아래 숫자 그대로, 50 이면 그 절반만큼만 입혀진다.
@@ -37,5 +38,14 @@ window.FILMS = [
     splitTone: { shadow: [150,20], highlight: [45,10] },
     curve: [0.02, 0.22, 0.52, 0.8, 0.97], grain: 45, vignette: -45,
     flash: 38, blur: 12, chroma: 15, amount: 75
+  },
+  {
+    id: 'silent', name: '무성영화', when: '옛날 영화 한 장면처럼, 표정 연기할 때',
+    // 누런 흑백(그림자는 갈색, 밝은 곳은 크림색), 강한 대비, 깜빡임, 긁힘과 먼지, 어두운 가장자리
+    strength: 100, exposure: 0, contrast: 35, highlights: -15, shadows: -20, temp: 0, tint: 0, saturation: -100,
+    hsl: { red: [0,0,0], orange: [0,0,0], yellow: [0,0,0], green: [0,0,0], cyan: [0,0,0], blue: [0,0,0], magenta: [0,0,0] },
+    splitTone: { shadow: [28,45], highlight: [40,35] },
+    curve: [0.04, 0.2, 0.5, 0.8, 0.95], grain: 55, vignette: -60,
+    blur: 20, flicker: 60, scratch: 60, amount: 100
   }
 ];
