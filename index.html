@@ -192,7 +192,7 @@ const VS = `attribute vec2 p;varying vec2 v;uniform float uMirror;
 void main(){v=p*.5+.5;if(uMirror>.5)v.x=1.-v.x;gl_Position=vec4(p,0.,1.);}`;
 const FS = `precision highp float;
 varying vec2 v;uniform sampler2D uTex;uniform vec2 uRes;uniform float uTime;
-uniform float uEv,uCf,uHi,uSh,uGs,uGrain,uVig,uStr,uSS,uHS,uPix,uLev,uBlur,uChroma,uScan,uFlash,uFlicker,uScratch;
+uniform float uEv,uCf,uHi,uSh,uGs,uGrain,uVig,uStr,uSS,uHS,uPix,uLev,uBlur,uChroma,uScan,uFlash,uFlicker,uScratch,uGlow;
 uniform vec3 uWb,uSC,uHC;uniform vec3 uBands[7];uniform float uCurve[5];
 float cv(float x){x=clamp(x,0.,1.);
   if(x<.25)return mix(uCurve[0],uCurve[1],x*4.);
@@ -222,6 +222,16 @@ void main(){
   c=(c-.5)*uCf+.5;
   float L=clamp(dot(c,vec3(.299,.587,.114)),0.,1.);
   c+=uHi*smoothstep(.5,1.,L)+uSh*(1.-smoothstep(0.,.5,L));
+  if(uGlow>0.){
+    // 빛 번짐. 톤 커브 앞에서 더해서, 번진 빛도 커브의 가장 밝은 값을 넘지 않게 한다.
+    // 픽셀마다 도는 각도를 다르게 해서 겹친 자국 대신 부드러운 번짐이 되게 한다.
+    // 아주 밝은 곳(창문, 눈, 조명)만 번지고 피부 같은 중간 밝기는 번지지 않는다.
+    vec2 rs=vec2(min(uRes.x,uRes.y))/uRes*.02;vec3 g=vec3(0.);float rot=hash(uv*uRes)*6.2831853;
+    for(int i=0;i<6;i++){float an=rot+float(i)*1.0472;
+      vec3 t1=texture2D(uTex,uv+vec2(cos(an),sin(an))*rs*(.6+.4*hash(uv+float(i)))).rgb;
+      vec3 t2=texture2D(uTex,uv+vec2(cos(an+.5236),sin(an+.5236))*rs*(1.4+.8*hash(uv-float(i)))).rgb;
+      g+=t1*max(dot(t1,vec3(.299,.587,.114))-.78,0.)+t2*max(dot(t2,vec3(.299,.587,.114))-.78,0.);}
+    c+=g/12.*4.*uGlow;}
   c=vec3(cv(c.r),cv(c.g),cv(c.b));
   vec3 k=rgb2hsl(c);float h=k.x;
   vec3 a=uBands[0]*max(bw(h,-60.,0.,30.),bw(h-360.,-60.,0.,30.))
@@ -276,7 +286,7 @@ function createRenderer(cv) {
   g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR);
   g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL, true);
   const u = {};
-  for (const n of ['uMirror','uRes','uTime','uEv','uCf','uHi','uSh','uGs','uGrain','uVig','uStr','uSS','uHS','uPix','uLev','uBlur','uChroma','uScan','uFlash','uFlicker','uScratch','uWb','uSC','uHC','uBands','uCurve'])
+  for (const n of ['uMirror','uRes','uTime','uEv','uCf','uHi','uSh','uGs','uGrain','uVig','uStr','uSS','uHS','uPix','uLev','uBlur','uChroma','uScan','uFlash','uFlicker','uScratch','uGlow','uWb','uSC','uHC','uBands','uCurve'])
     u[n] = g.getUniformLocation(prog, n);
   return { g, u };
 }
@@ -327,6 +337,8 @@ function applyFilm(f, gl = main.g, U = main.u, a = amountOf(f)) {
   // 옛날 영사기: 밝기가 깜빡이고, 세로 긁힘과 먼지가 프레임마다 바뀐다
   gl.uniform1f(U.uFlicker, (f.flicker || 0) / 100 * 0.25 * a);
   gl.uniform1f(U.uScratch, (f.scratch || 0) / 100 * a);
+  // 빛 번짐: 밝은 곳이 주변으로 부드럽게 퍼진다 (주변 12곳의 밝은 부분을 더함)
+  gl.uniform1f(U.uGlow, (f.glow || 0) / 100 * a);
 }
 
 // 필름이 하나도 없을 때 쓰는 값. 원본 그대로 보인다.
@@ -458,8 +470,9 @@ function setFilm(f) {
   try { localStorage.setItem('film', f.id); } catch (e) {}
 }
 
-/* 날짜 도장: 캠코더처럼 오른쪽 아래에 주황빛 디지털 글씨로 날짜와 시간을 찍는다.
-   화면(미리보기)과 저장한 사진에 같은 크기, 같은 자리로 들어간다. 필름의 stamp: 'date' 로 켠다. */
+/* 날짜 도장: 오른쪽 아래에 디지털 글씨로 날짜와 시간을 찍는다.
+   화면(미리보기)과 저장한 사진에 같은 크기, 같은 자리로 들어간다. 필름의 stamp: 'date' 로 켠다.
+   stampStyle: 'soft' 면 흰색으로 작고 흐릿하게, 없으면 주황색으로 또렷하게. */
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 function stampOn() { return !!(film && film.stamp === 'date' && amountOf(film) >= 0.2); }
 function drawStamp(ctx, W, H) {
@@ -473,12 +486,14 @@ function drawStamp(ctx, W, H) {
   s.width = tw + 2; s.height = fs * 2 + 5;
   x.font = `bold ${fs}px Menlo, "Courier New", monospace`;
   x.textAlign = 'right'; x.textBaseline = 'top';
+  const soft = !!(film && film.stampStyle === 'soft');
   lines.forEach((l, i) => {
-    x.fillStyle = 'rgba(90,30,0,.7)'; x.fillText(l, s.width - 1, i * (fs + 2) + 2);
-    x.fillStyle = '#ffb43a'; x.fillText(l, s.width - 2, i * (fs + 2) + 1);
+    x.fillStyle = soft ? 'rgba(0,0,0,.18)' : 'rgba(90,30,0,.7)'; x.fillText(l, s.width - 1, i * (fs + 2) + 2);
+    x.fillStyle = soft ? 'rgba(255,255,255,.8)' : '#ffb43a'; x.fillText(l, s.width - 2, i * (fs + 2) + 1);
   });
-  const k = (Math.min(W, H) * 0.05) / fs, m = Math.min(W, H) * 0.06;
-  ctx.save(); ctx.imageSmoothingEnabled = false;
+  // 흐릿한 도장은 작은 글씨를 부드럽게 늘려서 번진 듯 보이게 한다
+  const k = (Math.min(W, H) * (soft ? 0.04 : 0.05)) / fs, m = Math.min(W, H) * 0.06;
+  ctx.save(); ctx.imageSmoothingEnabled = soft;
   ctx.drawImage(s, W - m - s.width * k, H - m - s.height * k, s.width * k, s.height * k);
   ctx.restore();
 }
