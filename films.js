@@ -46,6 +46,6 @@ window.FILMS = [
     hsl: { red: [0,0,0], orange: [0,0,0], yellow: [0,0,0], green: [0,0,0], cyan: [0,0,0], blue: [0,0,0], magenta: [0,0,0] },
     splitTone: { shadow: [28,45], highlight: [40,35] },
     curve: [0.04, 0.2, 0.5, 0.8, 0.95], grain: 55, vignette: -60,
-    blur: 20, flicker: 60, scratch: 60, amount: 100
+    blur: 20, flicker: 60, scratch: 60, fixed: true
   }
 ];
