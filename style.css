@@ -1,0 +1,139 @@
+/* optikē 화면 모양.
+   모든 크기와 색은 여기 변수만 쓴다. 간격은 8의 배수, 글자는 3단계.
+   모양 규칙: 동그라미는 버튼, 네모는 사진(미리보기). */
+:root{
+  --s1:8px; --s2:16px; --s3:24px; --s4:32px;
+  --r0:8px; --r1:16px; --r2:24px; --round:999px;
+  --t1:13px; --t2:17px; --t3:34px;
+  --tap:48px; --thumb:56px; --shutter:76px; --btn:56px;
+  --dur:.3s; --ease:cubic-bezier(.2,.8,.2,1);
+  --bg:#000; --ink:#fff; --sub:rgba(235,235,245,.7); --line:transparent;
+  --fill:rgba(118,118,128,.28);      /* 사진이 들어올 빈 칸 */
+  --control:rgba(58,58,60,.7);       /* 동그란 버튼 바탕. 밝은 사진 위에서도 아이콘이 보인다 */
+  --glass:rgba(22,22,24,.72);        /* 사진 위에 뜨는 알약 버튼과 안내 */
+  --tray:rgba(0,0,0,.72);            /* 필름 창. 밝은 사진 위에서도 작은 글자가 읽힌다 */
+  --veil:rgba(0,0,0,.5);             /* 셔터 줄 */
+  --shade:0 1px 3px rgba(0,0,0,.5);  /* 사진 위 글자 그림자 */
+  --accent:#ffd60a; --on-accent:#000;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Apple SD Gothic Neo",sans-serif;
+  --bar:0px;                         /* 셔터 줄 높이. app.js 의 layout() 이 넣는다 */
+  color-scheme:dark;
+}
+/* 아이폰 설정 "대비 증가": 반투명을 거의 없애고 버튼에 테두리를 준다 */
+@media (prefers-contrast: more){
+  :root{--sub:#fff;--control:#2c2c2e;--glass:rgba(0,0,0,.92);--tray:rgba(0,0,0,.92);--veil:rgba(0,0,0,.85);--line:rgba(255,255,255,.6)}
+}
+/* "투명도 줄이기": 뒤가 비치지 않게 한다 */
+@media (prefers-reduced-transparency: reduce){
+  :root{--control:#2c2c2e;--glass:#161618;--tray:#000;--veil:#000}
+  .glass,#band,.side .ic{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:var(--t2);line-height:1.3;
+  letter-spacing:-0.01em;-webkit-font-smoothing:antialiased;overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
+button{font:inherit;letter-spacing:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer;touch-action:manipulation}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+/* 화면에는 안 보이고 화면 읽어 주기(VoiceOver)만 읽는 글 */
+.sr{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.glass{background:var(--glass);border:1px solid var(--line);-webkit-backdrop-filter:saturate(180%) blur(24px);backdrop-filter:saturate(180%) blur(24px)}
+.press{transition:transform var(--dur) var(--ease),opacity var(--dur) var(--ease)}
+.press:active{transform:scale(.96);opacity:.7}
+
+/* 촬영 화면. 평소에는 사진을 가리는 것이 거의 없다.
+   #top  가끔 쓰는 설정(사진 비율)      #view 사진이 될 화면. 셔터 줄 위 공간의 한가운데에 온다
+   #dock 지금 필름을 알려 주는 작은 버튼. 누르면 필름 창이 열린다
+   #band 필름 창. 열었을 때만 셔터 줄 위로 올라온다
+   #bar  셔터 줄(항상 같은 자리)
+   #view 의 위치와 크기는 app.js 의 layout() 이 사진 비율에 맞춰 정한다. */
+#app{position:fixed;inset:0;overflow:hidden;padding-top:env(safe-area-inset-top)}
+#view{position:absolute;left:0;right:0;overflow:hidden;background:var(--bg);touch-action:none;transition:top var(--dur) var(--ease),height var(--dur) var(--ease)}
+#gl{width:100%;height:100%;object-fit:cover;display:block}
+#flash{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
+#stamp{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+
+/* 알약 버튼: 보이는 높이는 32, 누를 수 있는 높이는 위아래 8씩 더해 48 */
+.pill{position:relative;height:var(--s4);padding:0 var(--s2);border-radius:var(--round);font-size:var(--t1);font-weight:600;white-space:nowrap;pointer-events:auto}
+.pill::after{content:"";position:absolute;inset:calc(var(--s1) * -1)}
+#top{position:absolute;left:0;right:0;top:env(safe-area-inset-top);height:var(--tap);display:flex;align-items:center;justify-content:flex-end;padding:0 var(--s2);pointer-events:none}
+#ratio{min-width:calc(var(--s4) * 2);font-variant-numeric:tabular-nums;letter-spacing:0}
+#dock{position:absolute;left:0;right:0;bottom:calc(var(--bar) + var(--s1));display:flex;justify-content:center;pointer-events:none}
+
+#toast{position:fixed;z-index:30;left:50%;top:calc(env(safe-area-inset-top) + var(--tap) + var(--s1));transform:translateX(-50%);width:max-content;max-width:calc(100% - var(--s4));padding:var(--s1) var(--s2);
+  border-radius:var(--r1);font-size:var(--t1);font-weight:500;line-height:1.4;text-align:center;opacity:0;transition:opacity var(--dur) var(--ease);pointer-events:none}
+#toast.show{opacity:1}
+
+/* 필름 창. 바탕은 무채색: 뒤 사진 색이 번져 보이지 않게 채도를 올리지 않는다. */
+#band{position:absolute;left:0;right:0;bottom:var(--bar);display:flex;flex-direction:column;gap:var(--s1);padding:var(--s1) 0;
+  background:var(--tray);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
+  visibility:hidden;opacity:0;transform:translateY(var(--s2));pointer-events:none;
+  transition:opacity var(--dur) var(--ease),transform var(--dur) var(--ease),visibility 0s var(--dur)}
+#band.open{visibility:visible;opacity:1;transform:none;pointer-events:auto;transition-delay:0s}
+#done{position:absolute;top:0;right:var(--s1);z-index:1;min-width:var(--tap);height:var(--tap);padding:0 var(--s1);font-size:var(--t2);font-weight:600}
+#label{text-align:center;padding:0 calc(var(--tap) + var(--s2))}
+#filmName{font-size:var(--t2);font-weight:600}
+#filmWhen{font-size:var(--t1);color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* 강도 다이얼: 윗줄은 "약하게 · 지금 숫자 · 강하게", 아랫줄은 카메라 링처럼 둥글게 도는 눈금.
+   칸 전체(높이 56)를 잡고 좌우로 돌린다. 숨은 슬라이더는 키보드와 화면 읽어 주기용이다. */
+#amount{position:relative;touch-action:none;cursor:grab;border-radius:var(--r1)}
+#amount:focus-within{outline:2px solid var(--accent);outline-offset:-2px}
+#amountRow{display:grid;grid-template-columns:1fr auto 1fr;align-items:baseline;height:var(--s3);padding:0 var(--s3);font-size:var(--t1);color:var(--sub)}
+#amountRow span:last-child{text-align:right}
+#amountNum{font-size:var(--t2);font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:0}
+#amountInput{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;pointer-events:none}
+#dial{display:block;width:100%;height:var(--s4)}
+
+#filmsWrap{position:relative}
+#films{display:flex;gap:var(--s1);overflow-x:auto;scroll-snap-type:x mandatory;position:relative;
+  padding:var(--s1) calc(50% - var(--thumb) / 2);scrollbar-width:none;touch-action:pan-x}
+#films::-webkit-scrollbar{display:none}
+.film{flex:0 0 var(--thumb);height:var(--thumb);border-radius:var(--r0);overflow:hidden;background:var(--fill);scroll-snap-align:center;will-change:transform,opacity}
+.film canvas{width:100%;height:100%;display:block}
+/* 가운데 노란 테두리 안에 온 필름이 지금 필름이다 */
+#ring{position:absolute;left:50%;top:50%;width:calc(var(--thumb) + var(--s1));height:calc(var(--thumb) + var(--s1));
+  transform:translate(-50%,-50%);border-radius:calc(var(--r0) + 4px);border:2px solid var(--accent);pointer-events:none}
+
+/* 셔터 줄. 16:9 처럼 긴 사진은 이 줄 뒤로 비치므로, 밝은 사진 위에서도 글자와 아이콘이 보이게 한다 */
+#bar{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr auto 1fr;align-items:start;background:var(--veil);
+  padding:var(--s2) var(--s4) calc(var(--s2) + env(safe-area-inset-bottom))}
+.side{display:flex;flex-direction:column;align-items:center;gap:var(--s1);width:var(--shutter);margin-top:calc((var(--shutter) - var(--tap)) / 2);
+  font-size:var(--t1);font-weight:500;white-space:nowrap;text-shadow:var(--shade)}
+.side .ic{width:var(--tap);height:var(--tap);border-radius:50%;background:var(--control);border:1px solid var(--line);display:grid;place-items:center;
+  -webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
+.side svg{width:var(--s3);height:var(--s3)}
+#pick{justify-self:start}
+#flip,#toCam{justify-self:end}
+#shutter{width:var(--shutter);height:var(--shutter);border-radius:50%;border:4px solid var(--ink);padding:3px}
+#shutter span{display:block;width:100%;height:100%;border-radius:50%;background:var(--ink);transition:transform var(--dur) var(--ease),opacity var(--dur) var(--ease)}
+#shutter:active span{transform:scale(.88)}
+#shutter.busy span{transform:scale(.88);opacity:.5}   /* 사진을 만드는 동안 */
+
+/* 시작 화면 */
+#start{position:fixed;inset:0;z-index:10;background:var(--bg);display:flex;flex-direction:column;justify-content:flex-end;gap:var(--s1);
+  padding:var(--s4) var(--s3) calc(var(--s3) + env(safe-area-inset-bottom))}
+#start .copy{margin:auto 0;text-align:center}
+#mark{display:block;width:calc(var(--tap) * 2);height:calc(var(--tap) * 2);margin:0 auto var(--s3);border-radius:var(--r2)}
+#start h1{font-size:var(--t3);font-weight:700;line-height:1.2;margin:0 0 var(--s1);letter-spacing:-0.025em}
+#start p{margin:0;font-size:var(--t2);color:var(--sub);line-height:1.5}
+#start #err{color:var(--ink);font-size:var(--t1);text-align:center;margin-bottom:var(--s1)}
+#err:empty{display:none}
+.big{width:100%;min-height:var(--btn);padding:var(--s2);border-radius:var(--r1);font-size:var(--t2);font-weight:600}
+.primary{background:var(--accent);color:var(--on-accent)}
+.primary:focus-visible{outline-color:var(--ink)}
+.quiet{min-height:var(--tap);font-size:var(--t2);font-weight:400;color:var(--ink)}
+
+/* 결과 화면: 사진은 뷰파인더가 있던 바로 그 자리에 놓인다 */
+#result{position:fixed;inset:0;z-index:20}
+#resultBg{position:absolute;inset:0;background:var(--bg)}
+#photoBox{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:center}
+#shot{display:block;max-width:100%;max-height:100%;transform-origin:center}
+#actions{position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column;gap:var(--s1);
+  padding:var(--s2) var(--s3) calc(var(--s2) + env(safe-area-inset-bottom));border-radius:var(--r2) var(--r2) 0 0}
+
+#video,input[type=file]{display:none}
+/* "동작 줄이기": 미끄러지는 움직임을 없앤다 (app.js 도 같은 설정을 보고 움직임을 줄인다) */
+@media (prefers-reduced-motion: reduce){
+  *{transition-duration:0s!important}
+}
