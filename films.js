@@ -8,10 +8,10 @@
 window.FILMS = [
   {
     id: 'pixel', name: '픽셀', when: '옛날 게임 화면처럼 도트로 찍혀요',
-    strength: 100, exposure: 5, contrast: 20, highlights: -5, shadows: 10, temp: 0, tint: 0, saturation: 35,
-    hsl: { red: [0,10,0], orange: [0,5,5], yellow: [0,10,5], green: [0,10,0], cyan: [0,10,0], blue: [0,15,0], magenta: [0,10,0] },
+    strength: 100, exposure: 0, contrast: 10, highlights: -5, shadows: 5, temp: 0, tint: 0, saturation: 20,
+    hsl: { red: [0,5,0], orange: [0,0,0], yellow: [0,5,0], green: [0,5,0], cyan: [0,5,0], blue: [0,10,0], magenta: [0,5,0] },
     splitTone: { shadow: [0,0], highlight: [0,0] },
-    curve: [0, 0.22, 0.5, 0.78, 1], grain: 0, vignette: 0,
-    pixel: 80, levels: 6
+    curve: [0, 0.24, 0.5, 0.76, 1], grain: 0, vignette: 0,
+    pixel: 55, levels: 12
   }
 ];
