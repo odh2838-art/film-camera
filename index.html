@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>필름 카메라</title>
+<style>
+:root{
+  --bg:#000; --ink:#fff; --sub:rgba(255,255,255,.62); --chip:rgba(255,255,255,.12);
+  --accent:#ffd36b; --sheet:#1c1c1e;
+  --font:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);overflow:hidden;overscroll-behavior:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+#app{height:100%;display:flex;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+header{padding:10px 16px 8px;text-align:center;min-height:58px}
+#filmName{font-size:17px;font-weight:700;letter-spacing:-0.01em}
+#filmWhen{font-size:13px;color:var(--sub)}
+#view{flex:1;min-height:0;position:relative;margin:0 8px;border-radius:18px;overflow:hidden;background:#111}
+#gl{width:100%;height:100%;object-fit:cover;display:block}
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}
+#films{display:flex;gap:8px;overflow-x:auto;padding:12px 16px 4px;scrollbar-width:none}
+#films::-webkit-scrollbar{display:none}
+.film{flex:0 0 auto;padding:9px 16px;border-radius:999px;background:var(--chip);font-size:15px;font-weight:600;color:var(--sub)}
+.film[aria-pressed="true"]{background:var(--accent);color:#1a1300}
+#bar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:12px 28px 14px}
+.side{width:52px;height:52px;border-radius:50%;background:var(--chip);display:grid;place-items:center}
+.side svg{width:24px;height:24px}
+#bar .side:last-child{justify-self:end}
+#shutter{width:76px;height:76px;border-radius:50%;border:4px solid #fff;padding:4px;background:none}
+#shutter span{display:block;width:100%;height:100%;border-radius:50%;background:#fff;transition:transform .1s}
+#shutter:active span{transform:scale(.88)}
+.overlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:32px 24px;text-align:center;z-index:10}
+.overlay[hidden]{display:none}
+.overlay h1{font-size:26px;margin:0;letter-spacing:-0.02em}
+.overlay p{margin:0;color:var(--sub);font-size:16px;line-height:1.5;max-width:320px}
+.big{width:100%;max-width:320px;padding:17px;border-radius:16px;font-size:17px;font-weight:700}
+.big.primary{background:var(--accent);color:#1a1300}
+.big.ghost{background:var(--chip)}
+#result{background:rgba(0,0,0,.94);justify-content:flex-end;padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+#shot{max-width:100%;max-height:62vh;border-radius:14px;margin-bottom:auto;margin-top:auto}
+#hint{font-size:14px}
+#err{color:#ff9f8a}
+input[type=file]{display:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div id="filmName"></div>
+    <div id="filmWhen"></div>
+  </header>
+  <div id="view"><canvas id="gl"></canvas><div id="flash"></div></div>
+  <div id="films" role="group" aria-label="필름 고르기"></div>
+  <div id="bar">
+    <button class="side" id="pick" aria-label="앨범에서 사진 고르기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg>
+    </button>
+    <button id="shutter" aria-label="사진 찍기"><span></span></button>
+    <button class="side" id="flip" aria-label="앞뒤 카메라 바꾸기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9a8 8 0 0114-3l2 2M20 15a8 8 0 01-14 3l-2-2"/><path d="M20 4v4h-4M4 20v-4h4"/></svg>
+    </button>
+  </div>
+</div>
+
+<div class="overlay" id="start">
+  <h1>필름 카메라</h1>
+  <p>필름을 고르기만 하면 돼요. 화면에 보이는 색 그대로 찍혀요.</p>
+  <p id="err" role="alert"></p>
+  <button class="big primary" id="go">카메라 켜기</button>
+  <button class="big ghost" id="go2">앨범 사진에 필름 입히기</button>
+</div>
+
+<div class="overlay" id="result" hidden>
+  <img id="shot" alt="방금 찍은 사진">
+  <p id="hint">사진을 길게 눌러도 저장할 수 있어요.</p>
+  <button class="big primary" id="save">사진 저장하기</button>
+  <button class="big ghost" id="back">돌아가기</button>
+</div>
+
+<video id="video" playsinline muted autoplay style="display:none"></video>
+<input type="file" id="file" accept="image/*">
+
+<script src="films.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const canvas = $('gl'), video = $('video');
+const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true, antialias: false });
+
+const VS = `attribute vec2 p;varying vec2 v;uniform float uMirror;
+void main(){v=p*.5+.5;if(uMirror>.5)v.x=1.-v.x;gl_Position=vec4(p,0.,1.);}`;
+const FS = `precision highp float;
+varying vec2 v;uniform sampler2D uTex;uniform vec2 uRes;uniform float uTime;
+uniform float uEv,uCf,uHi,uSh,uGs,uGrain,uVig,uStr,uSS,uHS;
+uniform vec3 uWb,uSC,uHC;uniform vec3 uBands[7];uniform float uCurve[5];
+float cv(float x){x=clamp(x,0.,1.);
+  if(x<.25)return mix(uCurve[0],uCurve[1],x*4.);
+  if(x<.5)return mix(uCurve[1],uCurve[2],(x-.25)*4.);
+  if(x<.75)return mix(uCurve[2],uCurve[3],(x-.5)*4.);
+  return mix(uCurve[3],uCurve[4],(x-.75)*4.);}
+vec3 rgb2hsl(vec3 c){float mx=max(c.r,max(c.g,c.b)),mn=min(c.r,min(c.g,c.b)),l=(mx+mn)*.5,d=mx-mn,h=0.,s=0.;
+  if(d>1e-5){s=l>.5?d/(2.-mx-mn):d/(mx+mn);
+    if(mx==c.r)h=(c.g-c.b)/d+(c.g<c.b?6.:0.);else if(mx==c.g)h=(c.b-c.r)/d+2.;else h=(c.r-c.g)/d+4.;h*=60.;}
+  return vec3(h,s,l);}
+vec3 hsl2rgb(vec3 k){float h=mod(k.x,360.)/60.,c=(1.-abs(2.*k.z-1.))*k.y,x=c*(1.-abs(mod(h,2.)-1.)),m=k.z-c*.5;vec3 r;
+  if(h<1.)r=vec3(c,x,0.);else if(h<2.)r=vec3(x,c,0.);else if(h<3.)r=vec3(0.,c,x);else if(h<4.)r=vec3(0.,x,c);else if(h<5.)r=vec3(x,0.,c);else r=vec3(c,0.,x);
+  return r+m;}
+float bw(float h,float lo,float c,float hi){return h<c?clamp((h-lo)/(c-lo),0.,1.):clamp((hi-h)/(hi-c),0.,1.);}
+float hash(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
+void main(){
+  vec3 o=texture2D(uTex,v).rgb;
+  vec3 c=o*uEv*uWb;
+  c=(c-.5)*uCf+.5;
+  float L=clamp(dot(c,vec3(.299,.587,.114)),0.,1.);
+  c+=uHi*smoothstep(.5,1.,L)+uSh*(1.-smoothstep(0.,.5,L));
+  c=vec3(cv(c.r),cv(c.g),cv(c.b));
+  vec3 k=rgb2hsl(c);float h=k.x;
+  vec3 a=uBands[0]*max(bw(h,-60.,0.,30.),bw(h-360.,-60.,0.,30.))
+    +uBands[1]*bw(h,0.,30.,60.)+uBands[2]*bw(h,30.,60.,120.)+uBands[3]*bw(h,60.,120.,180.)
+    +uBands[4]*bw(h,120.,180.,240.)+uBands[5]*bw(h,180.,240.,300.)+uBands[6]*bw(h,240.,300.,360.);
+  k.x+=a.x;
+  k.y=clamp(k.y*(1.+a.y/100.)*uGs,0.,1.);
+  k.z=clamp(k.z+a.z/100.*.3*k.y,0.,1.);
+  c=hsl2rgb(k);float l=k.z;
+  c+=(uSC-.5)*(1.-l)*(1.-l)*uSS+(uHC-.5)*l*l*uHS;
+  c+=(hash(v*uRes+uTime)-.5)*uGrain*(1.-abs(2.*l-1.)*.6);
+  vec2 d=v-.5;c*=1.+uVig*dot(d,d)*2.;
+  gl_FragColor=vec4(mix(o,clamp(c,0.,1.),uStr),1.);
+}`;
+
+function compile(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+let U = {};
+function initGL() {
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, 'p');
+  gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  for (const n of ['uMirror','uRes','uTime','uEv','uCf','uHi','uSh','uGs','uGrain','uVig','uStr','uSS','uHS','uWb','uSC','uHC','uBands','uCurve'])
+    U[n] = gl.getUniformLocation(prog, n);
+}
+
+function hue2rgb(h) {
+  h = ((h % 360) + 360) % 360 / 60; const x = 1 - Math.abs(h % 2 - 1);
+  return h < 1 ? [1,x,0] : h < 2 ? [x,1,0] : h < 3 ? [0,1,x] : h < 4 ? [0,x,1] : h < 5 ? [x,0,1] : [1,0,x];
+}
+// 필름 숫자를 셰이더 값으로 바꾸는 곳. 계산식을 바꾸면 모든 필름의 느낌이 같이 바뀐다.
+function applyFilm(f) {
+  gl.uniform1f(U.uEv, Math.pow(2, f.exposure / 50));
+  gl.uniform1f(U.uCf, 1 + f.contrast / 100 * 0.6);
+  gl.uniform1f(U.uHi, f.highlights / 100 * 0.25);
+  gl.uniform1f(U.uSh, f.shadows / 100 * 0.25);
+  gl.uniform3f(U.uWb, 1 + f.temp * 0.003, 1 - f.tint * 0.002, 1 - f.temp * 0.003);
+  gl.uniform1f(U.uGs, 1 + f.saturation / 100);
+  const h = f.hsl;
+  gl.uniform3fv(U.uBands, new Float32Array([].concat(h.red, h.orange, h.yellow, h.green, h.cyan, h.blue, h.magenta)));
+  gl.uniform1fv(U.uCurve, new Float32Array(f.curve));
+  gl.uniform3fv(U.uSC, hue2rgb(f.splitTone.shadow[0]));
+  gl.uniform3fv(U.uHC, hue2rgb(f.splitTone.highlight[0]));
+  gl.uniform1f(U.uSS, f.splitTone.shadow[1] / 100 * 0.5);
+  gl.uniform1f(U.uHS, f.splitTone.highlight[1] / 100 * 0.5);
+  gl.uniform1f(U.uGrain, f.grain / 100 * 0.35);
+  gl.uniform1f(U.uVig, f.vignette / 100 * 0.8);
+  gl.uniform1f(U.uStr, f.strength / 100);
+}
+
+let film = FILMS[1], source = null, facing = 'environment', stream = null, lastBlob = null;
+
+function setFilm(f) {
+  film = f; applyFilm(f);
+  $('filmName').textContent = f.name; $('filmWhen').textContent = f.when;
+  document.querySelectorAll('.film').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === f.id));
+  try { localStorage.setItem('film', f.id); } catch (e) {}
+}
+function buildFilms() {
+  for (const f of FILMS) {
+    const b = document.createElement('button');
+    b.className = 'film'; b.dataset.id = f.id; b.textContent = f.name;
+    b.onclick = () => setFilm(f);
+    $('films').appendChild(b);
+  }
+}
+
+function draw() {
+  if (!source) return;
+  const isVideo = source === video;
+  if (isVideo && video.readyState < 2) return;
+  const w = isVideo ? video.videoWidth : source.width, h = isVideo ? video.videoHeight : source.height;
+  if (!w || !h) return;
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h); }
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, source);
+  gl.uniform2f(U.uRes, w, h);
+  gl.uniform1f(U.uTime, isVideo ? (performance.now() % 1000) / 1000 : 0.37);
+  gl.uniform1f(U.uMirror, isVideo && facing === 'user' ? 1 : 0);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+function loop() { draw(); requestAnimationFrame(loop); }
+
+async function startCamera() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+  });
+  video.srcObject = stream; await video.play();
+  source = video; canvas.style.objectFit = 'cover';
+}
+function useImage(file) {
+  const img = new Image();
+  img.onload = () => {
+    const k = Math.min(1, 2400 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(img.src);
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    source = c; canvas.style.objectFit = 'contain';
+    $('start').hidden = true;
+  };
+  img.onerror = () => { $('err').textContent = '이 사진은 열 수 없어요. 다른 사진으로 해보세요.'; };
+  img.src = URL.createObjectURL(file);
+}
+
+$('go').onclick = async () => {
+  $('err').textContent = '';
+  try { await startCamera(); $('start').hidden = true; }
+  catch (e) {
+    $('err').textContent = e && e.name === 'NotAllowedError'
+      ? '카메라 권한이 꺼져 있어요. 사파리 주소창의 "가가" 버튼 > 웹 사이트 설정에서 카메라를 허용해 주세요.'
+      : '카메라를 켤 수 없어요. 앨범 사진으로 먼저 해보세요.';
+  }
+};
+$('go2').onclick = $('pick').onclick = () => $('file').click();
+$('file').onchange = e => { if (e.target.files[0]) useImage(e.target.files[0]); e.target.value = ''; };
+$('flip').onclick = async () => {
+  facing = facing === 'environment' ? 'user' : 'environment';
+  try { await startCamera(); } catch (e) { $('start').hidden = false; $('err').textContent = '카메라를 바꿀 수 없어요.'; }
+};
+$('shutter').onclick = () => {
+  if (!source) return;
+  draw();
+  const fl = $('flash'); fl.style.opacity = .8; setTimeout(() => fl.style.opacity = 0, 80);
+  canvas.toBlob(blob => {
+    if (!blob) return;
+    lastBlob = blob;
+    const img = $('shot'); if (img.src) URL.revokeObjectURL(img.src);
+    img.src = URL.createObjectURL(blob);
+    $('result').hidden = false;
+  }, 'image/jpeg', 0.92);
+};
+$('save').onclick = async () => {
+  if (!lastBlob) return;
+  const name = 'film-' + Date.now() + '.jpg';
+  const file = new File([lastBlob], name, { type: 'image/jpeg' });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = $('shot').src; a.download = name; a.click();
+};
+$('back').onclick = () => { $('result').hidden = true; };
+
+try {
+  initGL(); buildFilms();
+  let saved = null; try { saved = localStorage.getItem('film'); } catch (e) {}
+  setFilm(FILMS.find(f => f.id === saved) || FILMS[1]);
+  loop();
+} catch (e) {
+  $('err').textContent = '이 브라우저에서는 필름 효과를 쓸 수 없어요. (' + e.message + ')';
+}
+</script>
+</body>
+</html>
