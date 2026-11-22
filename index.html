@@ -46,11 +46,11 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
    #bar  셔터 줄(항상 같은 자리)
    #view 의 위치와 높이는 layout() 이 사진 비율에 맞춰 정한다. */
 #app{position:fixed;inset:0;overflow:hidden;padding-top:env(safe-area-inset-top)}
-#view{position:absolute;left:0;right:0;overflow:hidden;background:var(--bg);touch-action:none;transition:top var(--dur) var(--ease)}
+#view{position:absolute;left:0;right:0;overflow:hidden;background:var(--bg);touch-action:none;transition:top var(--dur) var(--ease),height var(--dur) var(--ease)}
 #gl{width:100%;height:100%;object-fit:cover;display:block}
 #flash{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
 #top{position:absolute;left:0;right:0;top:env(safe-area-inset-top);height:var(--tap);display:flex;align-items:center;justify-content:flex-end;padding:0 var(--s2);pointer-events:none}
-#ratio{min-width:var(--tap);height:var(--s4);padding:0 var(--s2);border-radius:var(--round);font-size:var(--t1);font-weight:600;pointer-events:auto;position:relative}
+#ratio{min-width:64px;height:var(--s4);padding:0 var(--s2);white-space:nowrap;overflow:visible;font-variant-numeric:tabular-nums;letter-spacing:0;border-radius:var(--round);font-size:var(--t1);font-weight:600;pointer-events:auto;position:relative}
 #ratio::after{content:"";position:absolute;inset:calc(var(--s1) * -1)}
 #toast{position:absolute;left:50%;top:calc(env(safe-area-inset-top) + var(--tap) + var(--s1));transform:translateX(-50%);width:max-content;max-width:calc(100% - var(--s4));padding:var(--s1) var(--s2);
   border-radius:var(--r1);font-size:var(--t1);font-weight:500;text-align:center;opacity:0;transition:opacity var(--dur) var(--ease);pointer-events:none}
@@ -338,9 +338,14 @@ function layout() {
   $('dock').style.bottom = barH + 8 + 'px';
   const isPhoto = source && source !== video;
   const room = H - safeTop - barH;
-  let h = isPhoto ? room : W * RATIOS[ratio].h, top;
-  if (h <= room) top = safeTop + (trayOpen && !isPhoto ? 0 : (room - h) / 2);
-  else { h = Math.min(H, h); top = (H - h) / 2; }
+  // 비율을 바꿔도 뷰파인더 가운데는 그대로 두고 위아래로 똑같이 커지고 작아진다 (기본 카메라와 같다).
+  // 화면 밖으로 넘치면 넘친 만큼만 안으로 밀어 넣는다.
+  // 화면보다 길면(사파리에서 16:9) 비율이 틀어지지 않게 폭을 줄이고 가운데에 둔다.
+  let w = W, h = isPhoto ? room : W * RATIOS[ratio].h, top;
+  if (!isPhoto && h > H) { h = H; w = Math.round(H / RATIOS[ratio].h); }
+  if (trayOpen && !isPhoto && h <= room) top = safeTop;
+  else top = Math.max(0, Math.min(H - h, safeTop + room / 2 - h / 2));
+  view.style.left = (W - w) / 2 + 'px'; view.style.width = w + 'px'; view.style.right = 'auto';
   view.style.top = top + 'px'; view.style.height = h + 'px';
   $('ratio').hidden = !!isPhoto || trayOpen;
 }
@@ -703,6 +708,8 @@ function visibleCrop() {
 }
 $('shutter').onclick = () => {
   if (busy || !ready()) return;
+  // 카메라를 다시 켜는 중이면(비율을 바꾼 직전 등) 찍지 않는다
+  if (source === video && !(stream && stream.getVideoTracks()[0] && stream.getVideoTracks()[0].readyState === 'live')) return;
   busy = true;
   draw();
   const out = visibleCrop();
