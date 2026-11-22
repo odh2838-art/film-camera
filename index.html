@@ -175,7 +175,7 @@ const VS = `attribute vec2 p;varying vec2 v;uniform float uMirror;
 void main(){v=p*.5+.5;if(uMirror>.5)v.x=1.-v.x;gl_Position=vec4(p,0.,1.);}`;
 const FS = `precision highp float;
 varying vec2 v;uniform sampler2D uTex;uniform vec2 uRes;uniform float uTime;
-uniform float uEv,uCf,uHi,uSh,uGs,uGrain,uVig,uStr,uSS,uHS;
+uniform float uEv,uCf,uHi,uSh,uGs,uGrain,uVig,uStr,uSS,uHS,uPix,uLev;
 uniform vec3 uWb,uSC,uHC;uniform vec3 uBands[7];uniform float uCurve[5];
 float cv(float x){x=clamp(x,0.,1.);
   if(x<.25)return mix(uCurve[0],uCurve[1],x*4.);
@@ -192,7 +192,9 @@ vec3 hsl2rgb(vec3 k){float h=mod(k.x,360.)/60.,c=(1.-abs(2.*k.z-1.))*k.y,x=c*(1.
 float bw(float h,float lo,float c,float hi){return h<c?clamp((h-lo)/(c-lo),0.,1.):clamp((hi-h)/(hi-c),0.,1.);}
 float hash(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 void main(){
-  vec3 o=texture2D(uTex,v).rgb;
+  vec2 uv=v;
+  if(uPix>0.){vec2 n=uPix*uRes/min(uRes.x,uRes.y);uv=(floor(v*n)+.5)/n;}
+  vec3 o=texture2D(uTex,uv).rgb;
   vec3 c=o*uEv*uWb;
   c=(c-.5)*uCf+.5;
   float L=clamp(dot(c,vec3(.299,.587,.114)),0.,1.);
@@ -207,8 +209,9 @@ void main(){
   k.z=clamp(k.z+a.z/100.*.3*k.y,0.,1.);
   c=hsl2rgb(k);float l=k.z;
   c+=(uSC-.5)*(1.-l)*(1.-l)*uSS+(uHC-.5)*l*l*uHS;
-  c+=(hash(v*uRes+uTime)-.5)*uGrain*(1.-abs(2.*l-1.)*.6);
-  vec2 d=v-.5;c*=1.+uVig*dot(d,d)*2.;
+  c+=(hash(uv*uRes+uTime)-.5)*uGrain*(1.-abs(2.*l-1.)*.6);
+  vec2 d=uv-.5;c*=1.+uVig*dot(d,d)*2.;
+  if(uLev>1.5)c=floor(clamp(c,0.,1.)*(uLev-1.)+.5)/(uLev-1.);
   gl_FragColor=vec4(mix(o,clamp(c,0.,1.),uStr),1.);
 }`;
 
@@ -238,7 +241,7 @@ function createRenderer(cv) {
   g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR);
   g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL, true);
   const u = {};
-  for (const n of ['uMirror','uRes','uTime','uEv','uCf','uHi','uSh','uGs','uGrain','uVig','uStr','uSS','uHS','uWb','uSC','uHC','uBands','uCurve'])
+  for (const n of ['uMirror','uRes','uTime','uEv','uCf','uHi','uSh','uGs','uGrain','uVig','uStr','uSS','uHS','uPix','uLev','uWb','uSC','uHC','uBands','uCurve'])
     u[n] = g.getUniformLocation(prog, n);
   return { g, u };
 }
@@ -266,9 +269,19 @@ function applyFilm(f, gl = main.g, U = main.u) {
   gl.uniform1f(U.uGrain, f.grain / 100 * 0.35);
   gl.uniform1f(U.uVig, f.vignette / 100 * 0.8);
   gl.uniform1f(U.uStr, f.strength / 100);
+  // 재미 효과. 없거나 0이면 꺼진다.
+  gl.uniform1f(U.uPix, f.pixel ? 8 + (100 - f.pixel) * 1.6 : 0);
+  gl.uniform1f(U.uLev, f.levels || 0);
 }
 
-let main, thumbs, film = FILMS[1], source = null, facing = 'environment', stream = null, lastBlob = null, busy = false;
+// 필름이 하나도 없을 때 쓰는 값. 원본 그대로 보인다.
+const NO_FILM = {
+  strength: 0, exposure: 0, contrast: 0, highlights: 0, shadows: 0, temp: 0, tint: 0, saturation: 0,
+  hsl: { red: [0,0,0], orange: [0,0,0], yellow: [0,0,0], green: [0,0,0], cyan: [0,0,0], blue: [0,0,0], magenta: [0,0,0] },
+  splitTone: { shadow: [0,0], highlight: [0,0] }, curve: [0, 0.25, 0.5, 0.75, 1], grain: 0, vignette: 0
+};
+
+let main, thumbs, film = null, source = null, facing = 'environment', stream = null, lastBlob = null, busy = false;
 
 /* 사진 비율. 기본 카메라와 같은 세 가지다.
    h 는 세로/가로, wide 는 카메라에 16:9 영상을 달라고 할지다. */
@@ -311,7 +324,7 @@ let trayOpen = false;
 function setTray(open) {
   trayOpen = open;
   $('band').classList.toggle('open', open);
-  $('dock').hidden = open;
+  $('dock').hidden = open || !FILMS.length;
   if (open) { drawThumbs(); goToFilm(FILMS.indexOf(film), false); }
 }
 $('filmBtn').onclick = () => setTray(true);
@@ -344,7 +357,7 @@ function draw() {
 const T = 120, THUMB_EVERY = 250;
 function initThumbs() {
   const atlas = document.createElement('canvas');
-  atlas.width = T * FILMS.length; atlas.height = T;
+  atlas.width = T * Math.max(1, FILMS.length); atlas.height = T;
   const small = document.createElement('canvas'); small.width = small.height = T;
   thumbs = { atlas, small, sctx: small.getContext('2d'), ...createRenderer(atlas), ctxs: [], last: 0 };
   thumbs.g.uniform2f(thumbs.u.uRes, T, T);
@@ -390,6 +403,7 @@ function buildFilms() {
   });
 }
 function goToFilm(i, smooth) {
+  if (!FILMS.length) return;
   i = Math.max(0, Math.min(FILMS.length - 1, i));
   const b = items[i];
   filmsEl.scrollTo({ left: b.offsetLeft - (filmsEl.clientWidth - b.offsetWidth) / 2, behavior: smooth && !motionOff.matches ? 'smooth' : 'auto' });
@@ -411,7 +425,7 @@ function updateDial() {
     b.style.opacity = 1 - d * 0.5;
   });
 }
-filmsEl.addEventListener('scroll', () => { updateDial(); setFilm(FILMS[centerIndex()]); }, { passive: true });
+filmsEl.addEventListener('scroll', () => { if (!FILMS.length) return; updateDial(); setFilm(FILMS[centerIndex()]); }, { passive: true });
 addEventListener('resize', () => { layout(); goToFilm(FILMS.indexOf(film), false); });
 
 // 화면을 좌우로 쓸어도 옆 필름으로 넘어간다
@@ -563,7 +577,8 @@ try {
   try { saved = localStorage.getItem('film'); savedRatio = localStorage.getItem('ratio'); } catch (e) {}
   const i = FILMS.findIndex(f => f.id === saved);
   setRatio(RATIOS[savedRatio] ? savedRatio : '4:3', false);
-  requestAnimationFrame(() => { layout(); goToFilm(i >= 0 ? i : 1, false); });
+  if (!FILMS.length) { applyFilm(NO_FILM); $('dock').hidden = true; }
+  requestAnimationFrame(() => { layout(); goToFilm(i >= 0 ? i : 0, false); });
   requestAnimationFrame(loop);
 } catch (e) {
   $('err').textContent = '이 브라우저에서는 필름 효과를 쓸 수 없어요. 사파리를 최신 버전으로 업데이트해 주세요.';
