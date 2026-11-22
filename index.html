@@ -875,7 +875,41 @@ async function takeFullPhoto() {
     const c = orientLike(bmp, video, video.videoWidth, video.videoHeight);
     if (bmp.close) bmp.close();
     return c;
-  } catch (e) { photoNote = (photoNote ? photoNote + ' ' : '') + (e && (e.name || e.message) || 'Error'); return null; }
+  } catch (e) {
+    photoNote = (photoNote ? photoNote + ' ' : '') + (e && (e.name || e.message) || 'Error');
+    // 아이폰 사파리는 takePhoto 가 UnknownError 로 실패할 때가 있다. 그때는 영상을 잠깐 가장 크게 바꿔서 한 장면을 받는다
+    try { const c = await bigFrame(track); photoNote = ''; return c; }
+    catch (e2) { photoNote += ' / ' + (e2 && (e2.name || e2.message) || 'Error'); return null; }
+  }
+}
+// 영상 크기를 이 카메라의 최대로 잠깐 올려서 한 장면을 받고, 원래 크기로 되돌린다
+function nextFrame() { return new Promise(r => { if (video.requestVideoFrameCallback) video.requestVideoFrameCallback(() => r()); setTimeout(r, 100); }); }
+async function bigFrame(track) {
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+  const mw = caps.width && caps.width.max, mh = caps.height && caps.height.max;
+  if (!mw || !mh) throw { name: 'NoTrackCaps' };
+  const long = Math.max(mw, mh), short = Math.min(mw, mh);
+  const wide = RATIOS[ratio].wide, k = wide ? 9 / 16 : 3 / 4;
+  const W = Math.min(long, Math.round(short / k)), H = Math.round(W * k);
+  const before = Math.max(video.videoWidth, video.videoHeight);
+  if (W <= before) throw { name: `TrackMax ${mw}x${mh}` };
+  const back = { facingMode: { ideal: facing }, aspectRatio: { ideal: wide ? 16 / 9 : 4 / 3 }, width: { ideal: 1920 }, height: { ideal: wide ? 1080 : 1440 } };
+  try {
+    await withTimeout(track.applyConstraints({ facingMode: { ideal: facing }, aspectRatio: { ideal: 1 / k }, width: { ideal: W }, height: { ideal: H } }), 3000);
+    const t0 = performance.now();
+    while (Math.max(video.videoWidth, video.videoHeight) <= before && performance.now() - t0 < 3000) await nextFrame();
+    const got = Math.max(video.videoWidth, video.videoHeight);
+    if (got <= before) throw { name: `NoBigger ${W}x${H}` };
+    // 크기가 바뀐 직후 몇 장면은 밝기·초점이 흔들릴 수 있어서 조금 기다린다
+    const t1 = performance.now();
+    for (let i = 0; i < 6 && performance.now() - t1 < 400; i++) await nextFrame();
+    const s = Math.min(1, MAX_PHOTO / got), c = document.createElement('canvas');
+    c.width = Math.round(video.videoWidth * s); c.height = Math.round(video.videoHeight * s);
+    c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
+    return c;
+  } finally {
+    track.applyConstraints(back).catch(() => {});
+  }
 }
 $('shutter').onclick = async () => {
   if (busy || !ready()) return;

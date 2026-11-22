@@ -51,6 +51,9 @@
 - 크기를 말하지 않고 takePhoto() 를 부르면 아이폰에서 영상 크기(1440x1920)로 찍혔다. 그래서 getPhotoCapabilities 의
   가장 큰 imageWidth/imageHeight 를 넘겨 달라고 한다. 그래도 작게 오거나 실패하면 저장 뒤 안내 문구 끝에 이유를 괄호로 붙인다
   (NoImageCapture, Small 크기, Caps-오류, Size-오류 등)
+- 실제 아이폰에서는 takePhoto 가 크기를 줘도, 안 줘도 UnknownError 로 실패했다(2026-11, "Size-UnknownError UnknownError").
+  그래서 실패하면 `bigFrame` 으로 영상 크기를 카메라 최대(getCapabilities)로 잠깐 올려 한 장면을 받고 1920 으로 되돌린다.
+  이것도 안 되면 이유를 " / " 뒤에 붙인다 (NoTrackCaps, TrackMax 크기, NoBigger 크기)
 - 받은 사진이 누워 있거나 뒤집혀 있을 수 있어서, 지금 화면과 가장 닮은 방향으로 돌린다(`orientLike`).
 - 앞카메라는 미리보기처럼 좌우를 뒤집어 저장한다. 사진 촬영이 안 되면 지금 화면 한 장면으로 저장한다.
 - 앨범 사진은 화면에는 긴 변 2400으로, 저장할 때는 4096까지 크게 쓴다.
