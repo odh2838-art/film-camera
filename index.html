@@ -4,7 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- 홈 화면 앱: 화면이 상태 표시줄 아래에서 시작하게 한다.
+     black-translucent 로 두면 아이폰이 화면 높이를 상태 표시줄만큼 짧게 잡아서
+     아래쪽이 잘리고 버튼을 눌러도 손가락 위치가 어긋났다. 바탕이 검정이라 겉보기는 같다. -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#000000">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="optikē">
@@ -629,7 +632,11 @@ async function resumeCamera() {
 function pauseCamera() {
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
 }
-document.addEventListener('visibilitychange', () => { if (document.hidden) pauseCamera(); else resumeCamera(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { pauseCamera(); return; }
+  scrollTo(0, 0); layout();   // 돌아왔을 때 화면이 밀려 있으면 제자리로
+  resumeCamera();
+});
 addEventListener('pageshow', e => { if (e.persisted) resumeCamera(); });
 video.addEventListener('pause', () => { if (cameraWanted && !document.hidden && stream) video.play().catch(() => {}); });
 // 홈 화면에 추가한 앱으로 열었는지 (주소창이 없다)
