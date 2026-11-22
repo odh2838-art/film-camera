@@ -192,7 +192,7 @@ const VS = `attribute vec2 p;varying vec2 v;uniform float uMirror;
 void main(){v=p*.5+.5;if(uMirror>.5)v.x=1.-v.x;gl_Position=vec4(p,0.,1.);}`;
 const FS = `precision highp float;
 varying vec2 v;uniform sampler2D uTex;uniform vec2 uRes;uniform float uTime;
-uniform float uEv,uCf,uHi,uSh,uGs,uGrain,uVig,uStr,uSS,uHS,uPix,uLev,uBlur,uChroma,uScan;
+uniform float uEv,uCf,uHi,uSh,uGs,uGrain,uVig,uStr,uSS,uHS,uPix,uLev,uBlur,uChroma,uScan,uFlash;
 uniform vec3 uWb,uSC,uHC;uniform vec3 uBands[7];uniform float uCurve[5];
 float cv(float x){x=clamp(x,0.,1.);
   if(x<.25)return mix(uCurve[0],uCurve[1],x*4.);
@@ -234,6 +234,7 @@ void main(){
   c+=(uSC-.5)*(1.-l)*(1.-l)*uSS+(uHC-.5)*l*l*uHS;
   c+=(hash(uv*uRes+uTime)-.5)*uGrain*(1.-abs(2.*l-1.)*.6);
   vec2 d=uv-.5;c*=1.+uVig*dot(d,d)*2.;
+  if(uFlash>0.){float fr=length(d*vec2(uRes.x/uRes.y,1.));c*=1.+uFlash*(1.-smoothstep(0.,.7,fr));}
   if(uLev>1.5)c=floor(clamp(c,0.,1.)*(uLev-1.)+.5)/(uLev-1.);
   if(uScan>0.){float per=max(2.,min(uRes.x,uRes.y)/240.);c*=1.-uScan*(.5+.5*cos(6.2831853*gl_FragCoord.y/per));}
   gl_FragColor=vec4(mix(o,clamp(c,0.,1.),uStr),1.);
@@ -265,7 +266,7 @@ function createRenderer(cv) {
   g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR);
   g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL, true);
   const u = {};
-  for (const n of ['uMirror','uRes','uTime','uEv','uCf','uHi','uSh','uGs','uGrain','uVig','uStr','uSS','uHS','uPix','uLev','uBlur','uChroma','uScan','uWb','uSC','uHC','uBands','uCurve'])
+  for (const n of ['uMirror','uRes','uTime','uEv','uCf','uHi','uSh','uGs','uGrain','uVig','uStr','uSS','uHS','uPix','uLev','uBlur','uChroma','uScan','uFlash','uWb','uSC','uHC','uBands','uCurve'])
     u[n] = g.getUniformLocation(prog, n);
   return { g, u };
 }
@@ -310,6 +311,8 @@ function applyFilm(f, gl = main.g, U = main.u, a = amountOf(f)) {
   gl.uniform1f(U.uBlur, (f.blur || 0) / 100 * 0.004 * a);
   gl.uniform1f(U.uChroma, (f.chroma || 0) / 100 * 0.006 * a);
   gl.uniform1f(U.uScan, (f.scan || 0) / 100 * 0.35 * a);
+  // 플래시: 가운데를 밝히고 바깥으로 갈수록 빛이 줄어든다
+  gl.uniform1f(U.uFlash, (f.flash || 0) / 100 * 0.45 * a);
 }
 
 // 필름이 하나도 없을 때 쓰는 값. 원본 그대로 보인다.
