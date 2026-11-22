@@ -93,6 +93,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #shutter{width:var(--shutter);height:var(--shutter);border-radius:50%;border:4px solid var(--ink);padding:3px}
 #shutter span{display:block;width:100%;height:100%;border-radius:50%;background:var(--ink);transition:transform var(--dur) var(--ease)}
 #shutter:active span{transform:scale(.88)}
+#shutter.busy span{transform:scale(.88);opacity:.5}   /* 고화질 사진을 만드는 동안 */
 
 /* 시작 화면 */
 #start{position:fixed;inset:0;z-index:10;background:var(--bg);display:flex;flex-direction:column;justify-content:flex-end;gap:var(--s1);
@@ -242,7 +243,9 @@ void main(){
   k.z=clamp(k.z+a.z/100.*.3*k.y,0.,1.);
   c=hsl2rgb(k);float l=k.z;
   c+=(uSC-.5)*(1.-l)*(1.-l)*uSS+(uHC-.5)*l*l*uHS;
-  c+=(hash(uv*uRes+uTime)-.5)*uGrain*(1.-abs(2.*l-1.)*.6);
+  // 입자 크기는 사진 크기와 상관없이 같게: 짧은 변 1440 기준으로 칸을 묶는다
+  vec2 gp=floor(uv*uRes/max(1.,min(uRes.x,uRes.y)/1440.));
+  c+=(hash(gp+uTime)-.5)*uGrain*(1.-abs(2.*l-1.)*.6);
   float fn=floor(uTime*24.);
   if(uFlicker>0.)c*=1.+uFlicker*(hash(vec2(fn,3.7))-.5);
   if(uScratch>0.){
@@ -417,15 +420,21 @@ async function setRatio(r, announce) {
 $('ratio').onclick = () => { const k = Object.keys(RATIOS); setRatio(k[(k.indexOf(ratio) + 1) % k.length], true); };
 
 /* 큰 화면: 매 프레임 그린다 */
+function render(src, w, h, time, mirror) {
+  const { g, u } = main;
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; g.viewport(0, 0, w, h); }
+  g.texImage2D(g.TEXTURE_2D, 0, g.RGB, g.RGB, g.UNSIGNED_BYTE, src);
+  g.uniform2f(u.uRes, w, h);
+  g.uniform1f(u.uTime, time);
+  g.uniform1f(u.uMirror, mirror);
+  g.drawArrays(g.TRIANGLE_STRIP, 0, 4);
+}
+function liveTime() { return source === video ? (performance.now() % 1000) / 1000 : 0.37; }
+function liveMirror() { return source === video && facing === 'user' ? 1 : 0; }
 function draw() {
   if (!ready()) return;
-  const { g, u } = main, [w, h] = srcSize(), isVideo = source === video;
-  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; g.viewport(0, 0, w, h); }
-  g.texImage2D(g.TEXTURE_2D, 0, g.RGB, g.RGB, g.UNSIGNED_BYTE, source);
-  g.uniform2f(u.uRes, w, h);
-  g.uniform1f(u.uTime, isVideo ? (performance.now() % 1000) / 1000 : 0.37);
-  g.uniform1f(u.uMirror, isVideo && facing === 'user' ? 1 : 0);
-  g.drawArrays(g.TRIANGLE_STRIP, 0, 4);
+  const [w, h] = srcSize();
+  render(source, w, h, liveTime(), liveMirror());
 }
 
 /* 필름 미리보기: 작게 줄인 화면 한 장에 모든 필름을 나란히 그리고, 1초에 4번만 새로 그린다 */
@@ -754,13 +763,19 @@ function hideStart() {
   if (s.hidden) return;
   s.animate([{ opacity: 1 }, { opacity: 0 }], { duration: DUR, easing: EASE }).onfinish = () => { s.hidden = true; };
 }
+// 앨범 사진: 화면에는 가볍게(긴 변 2400), 저장할 때는 크게(긴 변 4096까지) 쓴다
+let albumFull = null;
+function scaledCanvas(img, w, h, maxSide) {
+  const k = Math.min(1, maxSide / Math.max(w, h)), c = document.createElement('canvas');
+  c.width = Math.round(w * k); c.height = Math.round(h * k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c;
+}
 function useImage(file) {
   const img = new Image();
   img.onload = () => {
-    const k = Math.min(1, 2400 / Math.max(img.naturalWidth, img.naturalHeight));
-    const c = document.createElement('canvas');
-    c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
-    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    albumFull = scaledCanvas(img, img.naturalWidth, img.naturalHeight, MAX_PHOTO);
+    const c = scaledCanvas(albumFull, albumFull.width, albumFull.height, 2400);
     URL.revokeObjectURL(img.src);
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
     cameraWanted = false;
@@ -800,16 +815,68 @@ function visibleCrop() {
   out.getContext('2d').drawImage(canvas, Math.round((w - cw) / 2), Math.round((h - ch) / 2), cw, ch, 0, 0, cw, ch);
   return out;
 }
-$('shutter').onclick = () => {
+/* 고화질 사진.
+   미리보기는 영상(최대 1920x1440)이지만, 셔터를 누르면 아이폰의 사진 촬영 장치(ImageCapture.takePhoto)로
+   큰 사진(보통 4032x3024)을 따로 받아서 같은 필름을 입힌다. 안 되면 지금 화면 한 장면으로 저장한다. */
+const MAX_PHOTO = 4096;   // 긴 변 최대. 이보다 크면 줄인다 (아이폰 메모리 여유)
+function withTimeout(p, ms) { return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]); }
+// 사진이 옆으로 누워 있거나 뒤집혀 있을 수 있어서, 지금 화면과 가장 닮은 방향으로 돌린다
+function orientLike(bmp, refSrc, rw, rh) {
+  const T = 48, th = Math.round(T * rh / rw), thumb = d => {
+    const c = document.createElement('canvas'); c.width = T; c.height = th;
+    const x = c.getContext('2d'); d(x); const p = x.getImageData(0, 0, T, th).data, out = [];
+    for (let i = 0; i < p.length; i += 4) out.push(p[i] * .3 + p[i + 1] * .59 + p[i + 2] * .11);
+    return out;
+  };
+  const ref = thumb(x => x.drawImage(refSrc, 0, 0, T, th));
+  const draws = a => x => { x.translate(T / 2, th / 2); x.rotate(a * Math.PI / 180);
+    const side = a % 180 === 0; x.drawImage(bmp, -(side ? T : th) / 2, -(side ? th : T) / 2, side ? T : th, side ? th : T); };
+  const sameShape = (bmp.width >= bmp.height) === (rw >= rh);
+  let best = 0, bestD = Infinity;
+  for (const a of sameShape ? [0, 180] : [90, -90]) {
+    const t = thumb(draws(a)); let d = 0;
+    for (let i = 0; i < t.length; i++) d += Math.abs(t[i] - ref[i]);
+    if (d < bestD) { bestD = d; best = a; }
+  }
+  const side = best % 180 === 0, bw = side ? bmp.width : bmp.height, bh = side ? bmp.height : bmp.width;
+  const k = Math.min(1, MAX_PHOTO / Math.max(bw, bh)), c = document.createElement('canvas');
+  c.width = Math.round(bw * k); c.height = Math.round(bh * k);
+  const x = c.getContext('2d'); x.translate(c.width / 2, c.height / 2); x.rotate(best * Math.PI / 180);
+  const dw = (side ? c.width : c.height), dh = (side ? c.height : c.width);
+  x.drawImage(bmp, -dw / 2, -dh / 2, dw, dh);
+  return c;
+}
+async function takeFullPhoto() {
+  if (source !== video) return albumFull;
+  if (!('ImageCapture' in window) || !stream) return null;
+  const track = stream.getVideoTracks()[0];
+  if (!track || track.readyState !== 'live') return null;
+  try {
+    const blob = await withTimeout(new ImageCapture(track).takePhoto(), 5000);
+    const bmp = await createImageBitmap(blob);
+    const c = orientLike(bmp, video, video.videoWidth, video.videoHeight);
+    if (bmp.close) bmp.close();
+    return c;
+  } catch (e) { return null; }
+}
+$('shutter').onclick = async () => {
   if (busy || !ready()) return;
   // 카메라를 다시 켜는 중이면(비율을 바꾼 직전 등) 찍지 않는다
   if (source === video && !(stream && stream.getVideoTracks()[0] && stream.getVideoTracks()[0].readyState === 'live')) return;
-  busy = true;
+  busy = true; $('shutter').classList.add('busy');
+  const time = liveTime(), mirror = liveMirror();
   draw();
-  const out = visibleCrop();
-  if (stampOn()) drawStamp(out.getContext('2d'), out.width, out.height);
+  let out = visibleCrop();                 // 고화질을 못 받으면 이걸 쓴다
   $('flash').animate([{ opacity: .9 }, { opacity: 0 }], { duration: 200, easing: 'ease-out' });
+  const full = await takeFullPhoto();
+  if (full) {
+    render(full, full.width, full.height, time, mirror);
+    out = visibleCrop();
+    if (full !== albumFull) full.width = full.height = 0;   // 메모리 정리
+  }
+  if (stampOn()) drawStamp(out.getContext('2d'), out.width, out.height);
   out.toBlob(blob => {
+    $('shutter').classList.remove('busy');
     if (!blob) { busy = false; toast('사진을 만들지 못했어요. 한 번 더 눌러 주세요.'); return; }
     lastBlob = blob; openResult(blob);
   }, 'image/jpeg', 0.92);
