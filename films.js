@@ -27,10 +27,11 @@ window.FILMS = [
     // 2000년대 초 캠코더로 찍은 아련한 홈비디오.
     // 숫자는 그 뮤직비디오의 캠코더 장면 18개를 재서 맞췄다 (측정값 → 이 필름 결과):
     //   검정 1% 지점 0.072 → 0.074 / 흰색 99% 지점 0.895 → 0.81~0.90 / 평균 채도 0.046 → 0.05
-    //   그림자는 아주 살짝 푸르고, 밝은 곳은 분홍빛으로 따뜻하고, 중간은 거의 무채색
-    strength: 100, exposure: 0, contrast: 0, highlights: 0, shadows: 0, temp: 0, tint: 0, saturation: -70,
+    //   그림자는 아주 살짝 푸르고, 밝은 곳은 살구빛으로 따뜻하고, 중간은 거의 무채색
+    //   아이폰 실제 사진에서 중간 밝기(책상)가 분홍으로 떠서 채도 -70→-80, 밝은 곳 355°/17 → 5°/12, 온도 -3 으로 줄였다
+    strength: 100, exposure: 0, contrast: 0, highlights: 0, shadows: 0, temp: -3, tint: 0, saturation: -80,
     hsl: { red: [0,5,0], orange: [0,10,0], yellow: [0,0,0], green: [0,0,0], cyan: [0,0,0], blue: [0,0,0], magenta: [0,0,0] },
-    splitTone: { shadow: [220,7], highlight: [355,17] },
+    splitTone: { shadow: [220,7], highlight: [5,12] },
     curve: [0.07, 0.27, 0.49, 0.73, 0.9], grain: 30, vignette: -15,
     blur: 45, chroma: 15, scan: 5, glow: 45, stamp: 'date', stampStyle: 'soft', fixed: true
   },
