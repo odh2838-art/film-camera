@@ -30,11 +30,12 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .press{transition:transform var(--dur) var(--ease),opacity var(--dur) var(--ease)}
 .press:active{transform:scale(.96);opacity:.7}
 
-/* 촬영 화면은 위에서 아래로 네 칸이다. 칸마다 역할이 하나다.
-   1 #top  가끔 쓰는 설정(사진 비율)   2 #view 사진이 될 화면
-   3 #band 필름 고르기                 4 #bar  셔터 줄(항상 같은 자리)
-   #view 의 위치와 높이는 layout() 이 사진 비율에 맞춰 정한다.
-   화면이 짧아 칸이 겹칠 때만 #band 와 #bar 의 반투명 바탕이 사진 위에 비친다. */
+/* 촬영 화면. 평소에는 사진을 가리는 것이 거의 없다.
+   #top  가끔 쓰는 설정(사진 비율)      #view 사진이 될 화면. 셔터 줄 위 공간의 한가운데에 온다
+   #dock 지금 필름을 알려 주는 작은 버튼. 누르면 필름 창이 열린다
+   #band 필름 창. 열었을 때만 셔터 줄 위로 올라온다
+   #bar  셔터 줄(항상 같은 자리)
+   #view 의 위치와 높이는 layout() 이 사진 비율에 맞춰 정한다. */
 #app{position:fixed;inset:0;overflow:hidden;padding-top:env(safe-area-inset-top)}
 #view{position:absolute;left:0;right:0;overflow:hidden;background:var(--bg);touch-action:none}
 #gl{width:100%;height:100%;object-fit:cover;display:block}
@@ -46,8 +47,15 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   border-radius:var(--r1);font-size:var(--t1);font-weight:500;text-align:center;opacity:0;transition:opacity var(--dur) var(--ease);pointer-events:none}
 #toast.show{opacity:1}
 
-#band{position:absolute;left:0;right:0;display:flex;flex-direction:column;gap:var(--s1);padding:var(--s1) 0;background:var(--veil)}
-#label{text-align:center;padding:0 var(--s3)}
+#dock{position:absolute;left:0;right:0;display:flex;justify-content:center;pointer-events:none}
+#filmBtn{height:var(--s4);padding:0 var(--s2);border-radius:var(--round);font-size:var(--t1);font-weight:600;white-space:nowrap;pointer-events:auto;position:relative}
+#filmBtn::after{content:"";position:absolute;inset:calc(var(--s1) * -1)}
+#band{position:absolute;left:0;right:0;display:flex;flex-direction:column;gap:var(--s1);padding:var(--s2) 0 var(--s1);border-radius:var(--r2) var(--r2) 0 0;
+  visibility:hidden;opacity:0;transform:translateY(var(--s2));pointer-events:none;
+  transition:opacity var(--dur) var(--ease),transform var(--dur) var(--ease),visibility 0s var(--dur)}
+#band.open{visibility:visible;opacity:1;transform:none;pointer-events:auto;transition-delay:0s}
+#done{position:absolute;top:0;right:var(--s1);min-width:var(--tap);height:var(--tap);padding:0 var(--s1);font-size:var(--t2);font-weight:600}
+#label{text-align:center;padding:0 calc(var(--tap) + var(--s2))}
 #filmName{font-size:var(--t2);font-weight:600}
 #filmWhen{font-size:var(--t1);color:var(--ink);opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #filmsWrap{position:relative}
@@ -107,7 +115,11 @@ input[type=file]{display:none}
     <button id="ratio" class="glass press" aria-label="사진 비율 바꾸기"></button>
   </div>
   <div id="toast" class="glass" role="status" aria-live="polite"></div>
-  <div id="band">
+  <div id="dock">
+    <button id="filmBtn" class="glass press" aria-label="필름 고르기 열기"></button>
+  </div>
+  <div id="band" class="glass">
+    <button id="done" class="press">완료</button>
     <div id="label" aria-live="polite">
       <div id="filmName"></div>
       <div id="filmWhen"></div>
@@ -276,28 +288,34 @@ function ready() {
   const [w, h] = srcSize(); return w > 0 && h > 0;
 }
 
-/* 칸 배치. 셔터 줄은 맨 아래, 필름 칸은 그 바로 위에 고정이다.
-   뷰파인더는 4:3 자리를 기준으로 놓는다. 1:1 은 그 자리 가운데, 16:9 는 화면 가운데에 길게.
-   위쪽 설정 칸은 자리가 남을 때만 비워 두고, 모자라면 버튼이 사진 위에 얹힌다. */
+/* 칸 배치. 셔터 줄은 맨 아래에 고정이다.
+   뷰파인더는 셔터 줄 위에 남는 공간의 한가운데에 놓는다. 기본 카메라와 같다.
+   그 공간보다 긴 비율(16:9)은 화면 전체의 가운데에 놓고, 셔터 줄이 그 위에 반투명하게 얹힌다. */
 function layout() {
   const W = app.clientWidth, H = app.clientHeight;
   const safeTop = parseFloat(getComputedStyle(app).paddingTop) || 0;
-  const barH = $('bar').offsetHeight, bandH = $('band').offsetHeight, topH = $('top').offsetHeight;
+  const barH = $('bar').offsetHeight;
   $('band').style.bottom = barH + 'px';
+  $('dock').style.bottom = barH + 8 + 'px';
   const isPhoto = source && source !== video;
-  let top, h;
-  if (isPhoto) {
-    top = safeTop; h = H - top - barH - bandH;
-  } else if (ratio === '16:9') {
-    h = Math.min(H, W * RATIOS[ratio].h); top = (H - h) / 2;
-  } else {
-    const slot = W * 4 / 3;
-    const topPad = Math.max(0, Math.min(topH, H - safeTop - barH - bandH - slot));
-    h = W * RATIOS[ratio].h; top = safeTop + topPad + (slot - h) / 2;
-  }
+  const room = H - safeTop - barH;
+  let h = isPhoto ? room : W * RATIOS[ratio].h, top;
+  if (h <= room) top = safeTop + (room - h) / 2;
+  else { h = Math.min(H, h); top = (H - h) / 2; }
   view.style.top = top + 'px'; view.style.height = h + 'px';
   $('ratio').hidden = !!isPhoto;
 }
+
+/* 필름 창: 필름 버튼을 누르면 열리고, 완료나 사진을 누르면 닫힌다 */
+let trayOpen = false;
+function setTray(open) {
+  trayOpen = open;
+  $('band').classList.toggle('open', open);
+  $('dock').hidden = open;
+  if (open) { drawThumbs(); goToFilm(FILMS.indexOf(film), false); }
+}
+$('filmBtn').onclick = () => setTray(true);
+$('done').onclick = () => setTray(false);
 async function setRatio(r, announce) {
   const before = ratio;
   ratio = r; $('ratio').textContent = r;
@@ -345,7 +363,7 @@ function drawThumbs() {
 
 function loop(now) {
   draw();
-  if (source === video && $('result').hidden && now - thumbs.last > THUMB_EVERY) drawThumbs();
+  if (trayOpen && source === video && $('result').hidden && now - thumbs.last > THUMB_EVERY) drawThumbs();
   requestAnimationFrame(loop);
 }
 
@@ -355,6 +373,7 @@ function setFilm(f) {
   if (film === f && $('filmName').textContent) return;
   film = f; applyFilm(f);
   $('filmName').textContent = f.name; $('filmWhen').textContent = f.when;
+  $('filmBtn').textContent = '필름 · ' + f.name;
   $('label').animate(motionOff.matches ? [{ opacity: 0 }, { opacity: 1 }]
     : [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 200, easing: EASE });
   items.forEach(b => b.setAttribute('aria-pressed', FILMS[b.dataset.i] === f));
@@ -401,6 +420,7 @@ view.addEventListener('pointerdown', e => { sx = e.clientX; sy = e.clientY; });
 view.addEventListener('pointerup', e => {
   const dx = e.clientX - sx, dy = e.clientY - sy;
   if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) goToFilm(FILMS.indexOf(film) + (dx < 0 ? 1 : -1), true);
+  else if (trayOpen && Math.abs(dx) < 8 && Math.abs(dy) < 8) setTray(false);
 });
 
 /* 짧은 안내 */
@@ -445,7 +465,7 @@ function useImage(file) {
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
     source = c; canvas.style.objectFit = 'contain';
     layout();
-    drawThumbs();
+    if (trayOpen) drawThumbs();
     hideStart();
   };
   img.onerror = () => {
