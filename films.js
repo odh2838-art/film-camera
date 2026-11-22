@@ -4,6 +4,8 @@
 // 필드 목록: id, name, when, strength, exposure, contrast, highlights, shadows, temp, tint, saturation,
 //           hsl{red,orange,yellow,green,cyan,blue,magenta}, splitTone{shadow,highlight}, curve, grain, vignette
 // 재미 효과(없으면 꺼짐): pixel 0~100 도트 크기, levels 색 단계 수(2 이상)
+//   blur 0~100 가로 번짐, chroma 0~100 빨강·파랑 어긋남, scan 0~100 가로 줄무늬,
+//   stamp: 'date' 오른쪽 아래 날짜 도장
 // amount: 처음 강도 0~100 (없으면 100). 사용자가 강도를 밀면 그 값을 필름마다 기억한다.
 //         100 이면 아래 숫자 그대로, 50 이면 그 절반만큼만 입혀진다.
 // 비어 있으면 앱은 필름 없이 원본 그대로 보여 주고, 필름 버튼을 숨긴다.
@@ -16,5 +18,14 @@ window.FILMS = [
     curve: [0, 0.23, 0.5, 0.77, 1], grain: 0, vignette: 0,
     // 강도 100 = 40칸, 6단계(완전 게임 화면). 처음 강도 45 = 약 110칸, 13단계(원본이 잘 보이는 도트)
     pixel: 80, levels: 6, amount: 45
+  },
+  {
+    id: 'camcorder', name: '캠코더', when: '90년대 홈비디오처럼 날짜가 찍혀요',
+    // 물 빠진 듯 밝은 그림자, 따뜻하고 살짝 초록빛, 빨강이 번지는 비디오테이프 색
+    strength: 100, exposure: 5, contrast: -10, highlights: -20, shadows: 15, temp: 8, tint: -4, saturation: 12,
+    hsl: { red: [0,15,0], orange: [0,5,5], yellow: [-5,-10,0], green: [10,-20,0], cyan: [0,-15,0], blue: [-5,-10,0], magenta: [0,-10,0] },
+    splitTone: { shadow: [195,15], highlight: [40,10] },
+    curve: [0.06, 0.27, 0.52, 0.76, 0.94], grain: 30, vignette: -15,
+    blur: 55, chroma: 50, scan: 35, stamp: 'date', amount: 70
   }
 ];

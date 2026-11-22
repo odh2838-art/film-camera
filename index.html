@@ -49,6 +49,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #view{position:absolute;left:0;right:0;overflow:hidden;background:var(--bg);touch-action:none;transition:top var(--dur) var(--ease),height var(--dur) var(--ease)}
 #gl{width:100%;height:100%;object-fit:cover;display:block}
 #flash{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
+#stamp{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 #top{position:absolute;left:0;right:0;top:env(safe-area-inset-top);height:var(--tap);display:flex;align-items:center;justify-content:flex-end;padding:0 var(--s2);pointer-events:none}
 #ratio{min-width:64px;height:var(--s4);padding:0 var(--s2);white-space:nowrap;overflow:visible;font-variant-numeric:tabular-nums;letter-spacing:0;border-radius:var(--round);font-size:var(--t1);font-weight:600;pointer-events:auto;position:relative}
 #ratio::after{content:"";position:absolute;inset:calc(var(--s1) * -1)}
@@ -123,6 +124,7 @@ input[type=file]{display:none}
 <div id="app">
   <div id="view">
     <canvas id="gl"></canvas>
+    <canvas id="stamp" hidden></canvas>
     <div id="flash"></div>
   </div>
   <div id="top">
@@ -190,7 +192,7 @@ const VS = `attribute vec2 p;varying vec2 v;uniform float uMirror;
 void main(){v=p*.5+.5;if(uMirror>.5)v.x=1.-v.x;gl_Position=vec4(p,0.,1.);}`;
 const FS = `precision highp float;
 varying vec2 v;uniform sampler2D uTex;uniform vec2 uRes;uniform float uTime;
-uniform float uEv,uCf,uHi,uSh,uGs,uGrain,uVig,uStr,uSS,uHS,uPix,uLev;
+uniform float uEv,uCf,uHi,uSh,uGs,uGrain,uVig,uStr,uSS,uHS,uPix,uLev,uBlur,uChroma,uScan;
 uniform vec3 uWb,uSC,uHC;uniform vec3 uBands[7];uniform float uCurve[5];
 float cv(float x){x=clamp(x,0.,1.);
   if(x<.25)return mix(uCurve[0],uCurve[1],x*4.);
@@ -210,7 +212,13 @@ void main(){
   vec2 uv=v;
   if(uPix>0.){vec2 n=uPix*uRes/min(uRes.x,uRes.y);uv=(floor(v*n)+.5)/n;}
   vec3 o=texture2D(uTex,uv).rgb;
-  vec3 c=o*uEv*uWb;
+  vec3 c=o;
+  if(uBlur>0.){vec2 d=vec2(uBlur,0.);
+    c=(texture2D(uTex,uv-2.*d).rgb+texture2D(uTex,uv-d).rgb+o+texture2D(uTex,uv+d).rgb+texture2D(uTex,uv+2.*d).rgb)/5.;}
+  if(uChroma>0.){vec2 d=vec2(uChroma,0.),e=vec2(uBlur,0.);
+    c.r=(texture2D(uTex,uv+d-e).r+texture2D(uTex,uv+d).r+texture2D(uTex,uv+d+e).r)/3.;
+    c.b=(texture2D(uTex,uv-d-e).b+texture2D(uTex,uv-d).b+texture2D(uTex,uv-d+e).b)/3.;}
+  c=c*uEv*uWb;
   c=(c-.5)*uCf+.5;
   float L=clamp(dot(c,vec3(.299,.587,.114)),0.,1.);
   c+=uHi*smoothstep(.5,1.,L)+uSh*(1.-smoothstep(0.,.5,L));
@@ -227,6 +235,7 @@ void main(){
   c+=(hash(uv*uRes+uTime)-.5)*uGrain*(1.-abs(2.*l-1.)*.6);
   vec2 d=uv-.5;c*=1.+uVig*dot(d,d)*2.;
   if(uLev>1.5)c=floor(clamp(c,0.,1.)*(uLev-1.)+.5)/(uLev-1.);
+  if(uScan>0.){float per=max(2.,min(uRes.x,uRes.y)/240.);c*=1.-uScan*(.5+.5*cos(6.2831853*gl_FragCoord.y/per));}
   gl_FragColor=vec4(mix(o,clamp(c,0.,1.),uStr),1.);
 }`;
 
@@ -256,7 +265,7 @@ function createRenderer(cv) {
   g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR);
   g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL, true);
   const u = {};
-  for (const n of ['uMirror','uRes','uTime','uEv','uCf','uHi','uSh','uGs','uGrain','uVig','uStr','uSS','uHS','uPix','uLev','uWb','uSC','uHC','uBands','uCurve'])
+  for (const n of ['uMirror','uRes','uTime','uEv','uCf','uHi','uSh','uGs','uGrain','uVig','uStr','uSS','uHS','uPix','uLev','uBlur','uChroma','uScan','uWb','uSC','uHC','uBands','uCurve'])
     u[n] = g.getUniformLocation(prog, n);
   return { g, u };
 }
@@ -297,6 +306,10 @@ function applyFilm(f, gl = main.g, U = main.u, a = amountOf(f)) {
   // 재미 효과. 없거나 0이면 꺼진다. 강도가 낮을수록 도트는 잘아지고 색 단계는 많아진다.
   gl.uniform1f(U.uPix, f.pixel && a > 0 ? 8 + (100 - f.pixel * a) * 1.6 : 0);
   gl.uniform1f(U.uLev, f.levels && a > 0 ? Math.min(256, f.levels / a) : 0);
+  // 비디오 느낌: 가로로 번짐, 색 어긋남, 가로 줄무늬. 강도에 비례한다.
+  gl.uniform1f(U.uBlur, (f.blur || 0) / 100 * 0.004 * a);
+  gl.uniform1f(U.uChroma, (f.chroma || 0) / 100 * 0.006 * a);
+  gl.uniform1f(U.uScan, (f.scan || 0) / 100 * 0.35 * a);
 }
 
 // 필름이 하나도 없을 때 쓰는 값. 원본 그대로 보인다.
@@ -348,6 +361,7 @@ function layout() {
   view.style.left = (W - w) / 2 + 'px'; view.style.width = w + 'px'; view.style.right = 'auto';
   view.style.top = top + 'px'; view.style.height = h + 'px';
   $('ratio').hidden = !!isPhoto || trayOpen;
+  if (typeof updateStamp === 'function') updateStamp();
 }
 
 /* 필름 창: 필름 버튼을 누르면 열리고, 완료나 사진을 누르면 닫힌다 */
@@ -423,8 +437,53 @@ function setFilm(f) {
     : [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 200, easing: EASE });
   items.forEach(b => b.setAttribute('aria-pressed', FILMS[b.dataset.i] === f));
   showAmount();
+  updateStamp();
   try { localStorage.setItem('film', f.id); } catch (e) {}
 }
+
+/* 날짜 도장: 캠코더처럼 오른쪽 아래에 주황빛 디지털 글씨로 날짜와 시간을 찍는다.
+   화면(미리보기)과 저장한 사진에 같은 크기, 같은 자리로 들어간다. 필름의 stamp: 'date' 로 켠다. */
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+function stampOn() { return !!(film && film.stamp === 'date' && amountOf(film) >= 0.2); }
+function drawStamp(ctx, W, H) {
+  const d = new Date(), h = d.getHours();
+  const lines = [`${h < 12 ? 'AM' : 'PM'} ${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')}`,
+                 `${MONTHS[d.getMonth()]}. ${d.getDate()} ${d.getFullYear()}`];
+  // 작은 캔버스에 8px 글씨로 쓴 뒤 계단지게 키워서 옛날 디지털 글씨처럼 만든다
+  const fs = 8, s = document.createElement('canvas'), x = s.getContext('2d');
+  x.font = `bold ${fs}px Menlo, "Courier New", monospace`;
+  const tw = Math.ceil(Math.max(...lines.map(l => x.measureText(l).width)));
+  s.width = tw + 2; s.height = fs * 2 + 5;
+  x.font = `bold ${fs}px Menlo, "Courier New", monospace`;
+  x.textAlign = 'right'; x.textBaseline = 'top';
+  lines.forEach((l, i) => {
+    x.fillStyle = 'rgba(90,30,0,.7)'; x.fillText(l, s.width - 1, i * (fs + 2) + 2);
+    x.fillStyle = '#ffb43a'; x.fillText(l, s.width - 2, i * (fs + 2) + 1);
+  });
+  const k = (Math.min(W, H) * 0.05) / fs, m = Math.min(W, H) * 0.06;
+  ctx.save(); ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(s, W - m - s.width * k, H - m - s.height * k, s.width * k, s.height * k);
+  ctx.restore();
+}
+function updateStamp() {
+  const c = $('stamp'), on = stampOn() && !!source;
+  c.hidden = !on;
+  if (!on) return;
+  // 뷰파인더가 커지고 작아지는 중일 수 있어서, 지금 크기 대신 도착할 크기를 쓴다
+  const r = devicePixelRatio || 1;
+  const w = Math.round((parseFloat(view.style.width) || view.clientWidth) * r);
+  const h = Math.round((parseFloat(view.style.height) || view.clientHeight) * r);
+  if (!w || !h) return;
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  const ctx = c.getContext('2d'); ctx.clearRect(0, 0, w, h);
+  // 앨범 사진은 뷰파인더 안에 여백을 두고 놓이므로, 사진이 보이는 칸 안에 찍는다
+  const [sw, sh] = srcSize();
+  if (canvas.style.objectFit === 'contain' && sw && sh) {
+    const k = Math.min(w / sw, h / sh), dw = sw * k, dh = sh * k;
+    ctx.save(); ctx.translate((w - dw) / 2, (h - dh) / 2); drawStamp(ctx, dw, dh); ctx.restore();
+  } else drawStamp(ctx, w, h);
+}
+setInterval(updateStamp, 15000);
 
 /* 강도 다이얼: 눈금을 좌우로 돌리면 바로 화면에 보인다.
    왼쪽으로 돌리면(손가락을 왼쪽으로) 강해지고, 오른쪽으로 돌리면 약해진다. 손을 튕기면 조금 더 돌다 멈춘다. */
@@ -477,6 +536,7 @@ function setAmount(v) {
   applyFilm(film);
   dial.setAttribute('aria-valuenow', Math.round(dialVal));
   drawDial();
+  updateStamp();
 }
 function saveAmount() {
   if (!film) return;
@@ -713,6 +773,7 @@ $('shutter').onclick = () => {
   busy = true;
   draw();
   const out = visibleCrop();
+  if (stampOn()) drawStamp(out.getContext('2d'), out.width, out.height);
   $('flash').animate([{ opacity: .9 }, { opacity: 0 }], { duration: 200, easing: 'ease-out' });
   out.toBlob(blob => {
     if (!blob) { busy = false; toast('사진을 만들지 못했어요. 한 번 더 눌러 주세요.'); return; }
