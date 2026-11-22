@@ -53,7 +53,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #top{position:absolute;left:0;right:0;top:env(safe-area-inset-top);height:var(--tap);display:flex;align-items:center;justify-content:flex-end;padding:0 var(--s2);pointer-events:none}
 #ratio{min-width:64px;height:var(--s4);padding:0 var(--s2);white-space:nowrap;overflow:visible;font-variant-numeric:tabular-nums;letter-spacing:0;border-radius:var(--round);font-size:var(--t1);font-weight:600;pointer-events:auto;position:relative}
 #ratio::after{content:"";position:absolute;inset:calc(var(--s1) * -1)}
-#toast{position:absolute;left:50%;top:calc(env(safe-area-inset-top) + var(--tap) + var(--s1));transform:translateX(-50%);width:max-content;max-width:calc(100% - var(--s4));padding:var(--s1) var(--s2);
+#toast{position:fixed;z-index:30;left:50%;top:calc(env(safe-area-inset-top) + var(--tap) + var(--s1));transform:translateX(-50%);width:max-content;max-width:calc(100% - var(--s4));padding:var(--s1) var(--s2);
   border-radius:var(--r1);font-size:var(--t1);font-weight:500;text-align:center;opacity:0;transition:opacity var(--dur) var(--ease);pointer-events:none}
 #toast.show{opacity:1}
 
@@ -131,7 +131,6 @@ input[type=file]{display:none}
   <div id="top">
     <button id="ratio" class="glass press" aria-label="사진 비율 바꾸기"></button>
   </div>
-  <div id="toast" class="glass" role="status" aria-live="polite"></div>
   <div id="dock">
     <button id="filmBtn" class="glass press" aria-label="필름 고르기 열기"></button>
   </div>
@@ -170,6 +169,8 @@ input[type=file]{display:none}
   <button class="quiet press" id="go2">앨범 사진으로 해볼게요</button>
 </div>
 
+<!-- 안내 문구는 결과 화면 위에도 보이게 맨 위 층에 둔다 -->
+<div id="toast" class="glass" role="status" aria-live="polite"></div>
 <div id="result" hidden>
   <div id="resultBg"></div>
   <div id="photoBox"><img id="shot" alt="방금 찍은 사진"></div>
@@ -667,9 +668,9 @@ view.addEventListener('pointerup', e => {
 
 /* 짧은 안내 */
 let toastTimer;
-function toast(msg) {
+function toast(msg, ms) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms || 3000);
 }
 
 /* 카메라와 앨범 */
@@ -846,18 +847,35 @@ function orientLike(bmp, refSrc, rw, rh) {
   x.drawImage(bmp, -dw / 2, -dh / 2, dw, dh);
   return c;
 }
+// 큰 사진을 못 받았을 때 그 이유. 저장 뒤 안내 문구 끝에 괄호로 붙여서 원인을 찾는 데 쓴다
+let photoNote = '';
 async function takeFullPhoto() {
+  photoNote = '';
   if (source !== video) return albumFull;
-  if (!('ImageCapture' in window) || !stream) return null;
-  const track = stream.getVideoTracks()[0];
-  if (!track || track.readyState !== 'live') return null;
+  if (!('ImageCapture' in window)) { photoNote = 'NoImageCapture'; return null; }
+  const track = stream && stream.getVideoTracks()[0];
+  if (!track || track.readyState !== 'live') { photoNote = 'NoTrack'; return null; }
   try {
-    const blob = await withTimeout(new ImageCapture(track).takePhoto(), 5000);
+    const ic = new ImageCapture(track);
+    // 크기를 말하지 않으면 영상 크기(1920x1440)로 찍힐 수 있어서, 이 카메라가 찍을 수 있는 가장 큰 크기를 달라고 한다
+    let settings;
+    try {
+      const caps = await withTimeout(ic.getPhotoCapabilities(), 2000);
+      if (caps && caps.imageWidth && caps.imageWidth.max && caps.imageHeight && caps.imageHeight.max)
+        settings = { imageWidth: caps.imageWidth.max, imageHeight: caps.imageHeight.max };
+      else photoNote = 'NoCaps';
+    } catch (e) { photoNote = 'Caps-' + (e && e.name || e); }
+    let blob;
+    try { blob = await withTimeout(ic.takePhoto(settings), 5000); }
+    catch (e) { if (!settings) throw e; photoNote = 'Size-' + (e && e.name || e); blob = await withTimeout(ic.takePhoto(), 5000); }
     const bmp = await createImageBitmap(blob);
+    if (Math.max(bmp.width, bmp.height) <= Math.max(video.videoWidth, video.videoHeight))
+      photoNote = `Small ${bmp.width}x${bmp.height}` + (settings ? ` max ${settings.imageWidth}x${settings.imageHeight}` : '') + (photoNote ? ' ' + photoNote : '');
+    else photoNote = '';
     const c = orientLike(bmp, video, video.videoWidth, video.videoHeight);
     if (bmp.close) bmp.close();
     return c;
-  } catch (e) { return null; }
+  } catch (e) { photoNote = (photoNote ? photoNote + ' ' : '') + (e && (e.name || e.message) || 'Error'); return null; }
 }
 $('shutter').onclick = async () => {
   if (busy || !ready()) return;
@@ -879,6 +897,7 @@ $('shutter').onclick = async () => {
     $('shutter').classList.remove('busy');
     if (!blob) { busy = false; toast('사진을 만들지 못했어요. 한 번 더 눌러 주세요.'); return; }
     lastBlob = blob; openResult(blob);
+    if (photoNote) toast(`큰 사진을 받지 못해서 화면 크기로 찍혔어요. ${out.width}×${out.height} (${photoNote})`, 8000);
   }, 'image/jpeg', 0.92);
 };
 
