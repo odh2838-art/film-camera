@@ -67,6 +67,14 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .film canvas{width:100%;height:100%;display:block}
 #ring{position:absolute;left:50%;top:50%;width:calc(var(--thumb) + var(--s1));height:calc(var(--thumb) + var(--s1));
   transform:translate(-50%,-50%);border-radius:calc(var(--r0) + 4px);border:2px solid var(--accent);pointer-events:none}
+/* 강도: 왼쪽으로 밀면 원본에 가깝게, 오른쪽으로 밀면 필름이 진하게. 흰 부분이 지금 강도다. */
+#power{display:flex;align-items:center;gap:var(--s2);padding:0 var(--s3);font-size:var(--t1);color:var(--sub);white-space:nowrap}
+#amount{--p:50%;flex:1;min-width:0;height:var(--tap);margin:0;background:transparent;-webkit-appearance:none;appearance:none;touch-action:none}
+#amount::-webkit-slider-runnable-track{height:4px;border-radius:var(--round);background:linear-gradient(to right,var(--ink) var(--p),var(--fill) var(--p))}
+#amount::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;margin-top:-12px;border:0;border-radius:50%;background:var(--ink)}
+#amount::-moz-range-track{height:4px;border-radius:var(--round);background:var(--fill)}
+#amount::-moz-range-progress{height:4px;border-radius:var(--round);background:var(--ink)}
+#amount::-moz-range-thumb{width:28px;height:28px;border:0;border-radius:50%;background:var(--ink)}
 
 #bar{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr auto 1fr;align-items:start;background:var(--veil);
   padding:var(--s2) var(--s4) calc(var(--s2) + env(safe-area-inset-bottom))}
@@ -127,6 +135,11 @@ input[type=file]{display:none}
     <div id="filmsWrap">
       <div id="films" role="group" aria-label="필름 고르기. 좌우로 밀어서 바꿔요"></div>
       <div id="ring"></div>
+    </div>
+    <div id="power">
+      <span aria-hidden="true">약하게</span>
+      <input type="range" id="amount" min="0" max="100" step="1" aria-label="필름 강도">
+      <span aria-hidden="true">강하게</span>
     </div>
   </div>
   <div id="bar">
@@ -250,9 +263,19 @@ function hue2rgb(h) {
   h = ((h % 360) + 360) % 360 / 60; const x = 1 - Math.abs(h % 2 - 1);
   return h < 1 ? [1,x,0] : h < 2 ? [x,1,0] : h < 3 ? [0,1,x] : h < 4 ? [0,x,1] : h < 5 ? [x,0,1] : [1,0,x];
 }
+// 필름 강도. 사용자가 밀어서 정한 값(0~100)을 필름마다 기억한다.
+// 처음 값은 films.js 의 amount, 없으면 100.
+let amounts = {};
+try { amounts = JSON.parse(localStorage.getItem('amounts')) || {}; } catch (e) {}
+function amountOf(f) {
+  const v = f && f.id && amounts[f.id] != null ? amounts[f.id] : (f && f.amount != null ? f.amount : 100);
+  return Math.max(0, Math.min(100, v)) / 100;
+}
+
 // 필름 숫자를 셰이더 값으로 바꾸는 곳. 계산식을 바꾸면 모든 필름의 느낌이 같이 바뀐다.
 // gl, U 는 어느 화면(큰 화면 / 미리보기)에 적용할지다. 계산은 같다.
-function applyFilm(f, gl = main.g, U = main.u) {
+// a 는 강도(0~1). 1 이면 films.js 숫자 그대로, 0 이면 원본이다.
+function applyFilm(f, gl = main.g, U = main.u, a = amountOf(f)) {
   gl.uniform1f(U.uEv, Math.pow(2, f.exposure / 50));
   gl.uniform1f(U.uCf, 1 + f.contrast / 100 * 0.6);
   gl.uniform1f(U.uHi, f.highlights / 100 * 0.25);
@@ -268,10 +291,10 @@ function applyFilm(f, gl = main.g, U = main.u) {
   gl.uniform1f(U.uHS, f.splitTone.highlight[1] / 100 * 0.5);
   gl.uniform1f(U.uGrain, f.grain / 100 * 0.35);
   gl.uniform1f(U.uVig, f.vignette / 100 * 0.8);
-  gl.uniform1f(U.uStr, f.strength / 100);
-  // 재미 효과. 없거나 0이면 꺼진다.
-  gl.uniform1f(U.uPix, f.pixel ? 8 + (100 - f.pixel) * 1.6 : 0);
-  gl.uniform1f(U.uLev, f.levels || 0);
+  gl.uniform1f(U.uStr, f.strength / 100 * a);
+  // 재미 효과. 없거나 0이면 꺼진다. 강도가 낮을수록 도트는 잘아지고 색 단계는 많아진다.
+  gl.uniform1f(U.uPix, f.pixel && a > 0 ? 8 + (100 - f.pixel * a) * 1.6 : 0);
+  gl.uniform1f(U.uLev, f.levels && a > 0 ? Math.min(256, f.levels / a) : 0);
 }
 
 // 필름이 하나도 없을 때 쓰는 값. 원본 그대로 보인다.
@@ -390,8 +413,27 @@ function setFilm(f) {
   $('label').animate(motionOff.matches ? [{ opacity: 0 }, { opacity: 1 }]
     : [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 200, easing: EASE });
   items.forEach(b => b.setAttribute('aria-pressed', FILMS[b.dataset.i] === f));
+  showAmount();
   try { localStorage.setItem('film', f.id); } catch (e) {}
 }
+
+/* 강도 조절: 밀자마자 화면에 바로 보인다 */
+const amountEl = $('amount');
+function showAmount() {
+  const v = Math.round(amountOf(film) * 100);
+  amountEl.value = v; amountEl.style.setProperty('--p', v + '%');
+  amountEl.setAttribute('aria-valuetext', '강도 ' + v);
+}
+amountEl.addEventListener('input', () => {
+  if (!film) return;
+  amounts[film.id] = +amountEl.value;
+  applyFilm(film); showAmount();
+  if (source !== video) drawThumbs();
+});
+amountEl.addEventListener('change', () => {
+  try { localStorage.setItem('amounts', JSON.stringify(amounts)); } catch (e) {}
+  drawThumbs();
+});
 function buildFilms() {
   FILMS.forEach((f, i) => {
     const b = document.createElement('button');
