@@ -280,6 +280,7 @@ function hue2rgb(h) {
 let amounts = {};
 try { amounts = JSON.parse(localStorage.getItem('amounts')) || {}; } catch (e) {}
 function amountOf(f) {
+  if (f && f.fixed) return 1;   // 강도 조절이 없는 필름은 항상 최대
   const v = f && f.id && amounts[f.id] != null ? amounts[f.id] : (f && f.amount != null ? f.amount : 100);
   return Math.max(0, Math.min(100, v)) / 100;
 }
@@ -528,6 +529,7 @@ function drawDial() {
   dctx.beginPath(); dctx.moveTo(cx, top - 6); dctx.lineTo(cx, top + 18); dctx.stroke();
 }
 function showAmount() {
+  dial.hidden = !!(film && film.fixed);   // 강도 조절이 없는 필름은 다이얼을 숨긴다
   dialVal = amountOf(film) * 100;
   dial.setAttribute('aria-valuenow', Math.round(dialVal));
   drawDial();
@@ -845,6 +847,8 @@ try {
 } catch (e) {
   $('err').textContent = '이 브라우저에서는 필름 효과를 쓸 수 없어요. 사파리를 최신 버전으로 업데이트해 주세요.';
 }
+// 새로 올린 필름과 화면이 바로 보이게 한다 (sw.js 참고)
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
 </html>
