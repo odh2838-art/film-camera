@@ -1,0 +1,28 @@
+<svg viewBox="0 0 1024 1024" width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- optikē 앱 아이콘: 데저트 색 리퀴드 글래스 렌즈.
+       볼록 렌즈는 장면을 거꾸로 맺는다. 렌즈 아래 밝은 점은 렌즈가 모은 빛.
+       모서리는 둥글게 깎지 않는다(아이폰이 알아서 깎는다). PNG는 이 파일에서 만든다. -->
+  <defs>
+    <linearGradient id="obg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e3d3bd"/><stop offset="0.44" stop-color="#bf9f7d"/><stop offset="0.5" stop-color="#a37b57"/><stop offset="0.56" stop-color="#4a3828"/><stop offset="1" stop-color="#17110c"/></linearGradient>
+    <linearGradient id="oflip" gradientUnits="userSpaceOnUse" x1="0" y1="880" x2="0" y2="144"><stop offset="0" stop-color="#e3d3bd"/><stop offset="0.44" stop-color="#bf9f7d"/><stop offset="0.5" stop-color="#a37b57"/><stop offset="0.56" stop-color="#4a3828"/><stop offset="1" stop-color="#17110c"/></linearGradient>
+    <radialGradient id="oedge" cx=".5" cy=".5" r=".5"><stop offset=".78" stop-color="#fff" stop-opacity="0"/><stop offset=".94" stop-color="#fff" stop-opacity="0.28"/><stop offset="1" stop-color="#fff" stop-opacity=".05"/></radialGradient>
+    <radialGradient id="obody" cx=".36" cy=".3" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".16"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <radialGradient id="ocaustic" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fffaf0" stop-opacity=".9"/><stop offset="1" stop-color="#fffaf0" stop-opacity="0"/></radialGradient>
+    <filter id="ofrost" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="7"/></filter>
+    <filter id="osh" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="40"/></filter>
+    <filter id="ospec" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.2"/></filter>
+    <clipPath id="oin"><circle cx="512" cy="500" r="292"/></clipPath>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#obg)"/>
+  <ellipse cx="512" cy="826" rx="250" ry="58" fill="#000" opacity="0.16" filter="url(#osh)"/>
+  <ellipse cx="512" cy="812" rx="70" ry="22" fill="url(#ocaustic)" style="mix-blend-mode:screen" opacity="0.8"/>
+  <g clip-path="url(#oin)">
+    <g filter="url(#ofrost)"><rect x="150" y="140" width="724" height="724" fill="url(#oflip)"/></g>
+    <rect x="150" y="140" width="724" height="724" fill="#fff" opacity="0.06"/>
+    <circle cx="512" cy="500" r="292" fill="url(#obody)"/>
+    <circle cx="512" cy="500" r="292" fill="url(#oedge)"/>
+  </g>
+  <circle cx="512" cy="500" r="290.5" fill="none" stroke="#fff" stroke-opacity="0.45" stroke-width="3"/>
+  <path d="M256.86 389.59 A278 278 0 0 1 577.44 229.81" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" opacity=".95" filter="url(#ospec)"/>
+  <path d="M775.02 596.01 A280 280 0 0 1 600.29 765.72" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" opacity=".55" filter="url(#ospec)"/>
+</svg>

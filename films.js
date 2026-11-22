@@ -10,10 +10,11 @@
 window.FILMS = [
   {
     id: 'pixel', name: '픽셀', when: '옛날 게임 화면처럼 도트로 찍혀요',
-    strength: 100, exposure: 0, contrast: 10, highlights: -5, shadows: 5, temp: 0, tint: 0, saturation: 20,
-    hsl: { red: [0,5,0], orange: [0,0,0], yellow: [0,5,0], green: [0,5,0], cyan: [0,5,0], blue: [0,10,0], magenta: [0,5,0] },
+    strength: 100, exposure: 0, contrast: 15, highlights: -5, shadows: 5, temp: 0, tint: 0, saturation: 30,
+    hsl: { red: [0,10,0], orange: [0,5,0], yellow: [0,10,0], green: [0,10,0], cyan: [0,10,0], blue: [0,15,0], magenta: [0,10,0] },
     splitTone: { shadow: [0,0], highlight: [0,0] },
-    curve: [0, 0.24, 0.5, 0.76, 1], grain: 0, vignette: 0,
-    pixel: 55, levels: 12, amount: 50
+    curve: [0, 0.23, 0.5, 0.77, 1], grain: 0, vignette: 0,
+    // 강도 100 = 40칸, 6단계(완전 게임 화면). 처음 강도 45 = 약 110칸, 13단계(원본이 잘 보이는 도트)
+    pixel: 80, levels: 6, amount: 45
   }
 ];
